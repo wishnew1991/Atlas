@@ -1,0 +1,113 @@
+/**
+ * Build a concrete ExecutionPlan from planner capabilities.
+ */
+
+import type { Capability, Plan } from "@/lib/atlas/planner/planner";
+import type { ExecutionPlan, ExecutionStep, RetryPolicy } from "./types";
+
+const DEFAULT_RETRY: RetryPolicy = {
+  maxAttempts: 2,
+  backoffStrategy: "exponential",
+  initialDelay: 400,
+  maxDelay: 4000,
+};
+
+function step(
+  id: string,
+  description: string,
+  capabilityName: string,
+  dependencies: string[],
+  parameters: Record<string, unknown> = {}
+): ExecutionStep {
+  return {
+    id,
+    description,
+    capability: { id: capabilityName, name: capabilityName, type: "internal" },
+    parameters,
+    dependencies,
+    retryPolicy: DEFAULT_RETRY,
+    timeout: 60_000,
+    status: "pending",
+  };
+}
+
+/**
+ * Standard chat turn plan:
+ * understand → memory → select_tools → invoke_tools → compose_reply
+ * (+ request_approval placeholder when domain can spend)
+ */
+export function buildExecutionPlan(input: {
+  goal: string;
+  planned: Plan;
+  domain: string;
+}): ExecutionPlan {
+  const { planned, domain } = input;
+  const capabilities = planned.capabilities.filter((cap) => cap !== "none");
+  const mayNeedApproval = capabilities.some((cap) =>
+    (["food", "travel", "shopping", "rides"] as Capability[]).includes(cap)
+  );
+
+  const steps: ExecutionStep[] = [
+    step("understand", "Understand request and conversation state", "understand", [], {
+      reason: planned.reason,
+      isContinuation: planned.isContinuation,
+    }),
+    step("retrieve_memory", "Retrieve relevant memory", "retrieve_memory", ["understand"], {
+      domain,
+    }),
+    step("select_tools", "Select tools for capabilities", "select_tools", ["retrieve_memory"], {
+      capabilities,
+      domain,
+    }),
+    step("invoke_tools", "Invoke tools / MCP as needed", "invoke_tools", ["select_tools"], {
+      capabilities,
+      domain,
+    }),
+    step("compose_reply", "Compose assistant reply", "compose_reply", ["invoke_tools"], {
+      domain,
+    }),
+  ];
+
+  if (mayNeedApproval) {
+    steps.push(
+      step(
+        "request_approval",
+        "Pause for user approval when an action is prepared",
+        "request_approval",
+        ["compose_reply"],
+        { domain }
+      )
+    );
+    steps.push(
+      step(
+        "fulfill_approval",
+        "Continue the plan after the user approves",
+        "fulfill_approval",
+        ["request_approval"],
+        { domain }
+      )
+    );
+  }
+
+  const nodes = new Map(steps.map((entry) => [entry.id, entry]));
+  const edges = steps.flatMap((entry) =>
+    entry.dependencies.map((from) => ({ from, to: entry.id, type: "requires" as const }))
+  );
+
+  return {
+    steps,
+    dependencies: { nodes, edges },
+    resources: capabilities.map((cap) => ({ type: "mcp_server" as const, id: cap })),
+  };
+}
+
+export function buildDemoExecutionPlan(goal: string): ExecutionPlan {
+  const steps = [
+    step("compose_reply", "Demo reply", "compose_reply", [], { demo: true, goal }),
+  ];
+  return {
+    steps,
+    dependencies: { nodes: new Map(steps.map((entry) => [entry.id, entry])), edges: [] },
+    resources: [],
+  };
+}

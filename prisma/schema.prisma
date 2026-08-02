@@ -99,11 +99,17 @@ model Approval {
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  userId    String?
-  user      AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  messages  Message[]
+  id            String    @id @default(cuid())
+  userId        String?
+  user          AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Rolling summary of older turns so the model keeps context without full history.
+  summary       String    @default("")
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  messages      Message[]
+
+  @@index([userId, lastMessageAt])
 }
 
 model Message {
@@ -112,7 +118,68 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String
   content        String
+  /// Optional JSON metadata (tools used, runId, etc.).
+  meta           String?
   createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+
+/// Per-turn observability for latency, tokens, tools, and stage timing.
+model TurnTrace {
+  id             String   @id @default(cuid())
+  runId          String   @unique
+  conversationId String?
+  userId         String?
+  domain         String?
+  modelId        String?
+  stages         String   @default("[]")
+  toolsUsed      String   @default("[]")
+  tokensIn       Int?
+  tokensOut      Int?
+  success        Boolean  @default(true)
+  error          String?
+  totalMs        Int?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+/// Durable execution unit of work (chat turns and workflows).
+model Execution {
+  id             String    @id @default(cuid())
+  /// Actor id (Clerk id or null for guest). No AtlasUser FK until identity stabilizes.
+  userId         String?
+  goal           String
+  type           String    @default("immediate")
+  status         String    @default("planning")
+  planJson       String    @default("{}")
+  stateJson      String    @default("{}")
+  resultsJson    String    @default("[]")
+  metadataJson   String    @default("{}")
+  conversationId String?
+  runId          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+  events         ExecutionEvent[]
+
+  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model ExecutionEvent {
+  id          String   @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  type        String
+  payload     String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([executionId, createdAt])
 }
 
 model ActivityItem {
@@ -168,7 +235,8 @@ model Memory {
   // One of: active | archived. Archived memories are excluded from retrieval.
   status     String   @default("active")
   text       String
-  embedding  String   // JSON-encoded vector
+  /// Optional embedding blob (JSON float array). Postgres/pgvector deferred.
+  embedding  String?
   // Confidence (0..1) raised by repeated confirmation, lowered by contradictions.
   confidence Float    @default(0.5)
   // Recency/importance signals used by the Memory Service for ranking.

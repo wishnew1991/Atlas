@@ -24,6 +24,8 @@ Previous foundation work (BullMQ/Redis sketches, security scaffolding, Postgres 
 - Chat create/stream paths create and drive Executions (`executionId` on SSE `meta`/`done`)
 - `GET /api/executions` and `GET /api/executions/[id]`
 - Approval completion resumes linked Execution
+- Observe → reflect → learn pipeline (`reflect.ts`): durable events, state variables, preference memories
+- Post-approval resume runs remaining plan steps (`fulfill_approval`) then learn; UPI confirm resumes too
 
 ### Acceptance criteria
 
@@ -32,14 +34,17 @@ Previous foundation work (BullMQ/Redis sketches, security scaffolding, Postgres 
 - [x] Steps run through in-process job queue
 - [x] Chat/food/approval flows preserved (additive APIs)
 - [x] No Redis required for `npm run dev`
+- [x] Observing/reflecting are real learning steps (not status stubs)
+- [x] Approval unlocks remaining plan steps (not status-only flip)
 
-## Next (still Phase 1 polish / later phases)
+## Next (later phases)
 
 - [x] Wire Tasks/Activity UI to Executions
 - Activity = accomplishments with receipt / status / timeline / actions (not chat duplicate)
-- Stronger observe/reflect learning (currently status stubs)
-- Resume multi-step plans after approval beyond status flip
-- Only then: resume Postgres migration / production job backend
+- [x] Stronger observe/reflect learning (events + memories + plan notes)
+- [x] Resume multi-step plans after approval beyond status flip
+- Resume Postgres migration / production job backend when ready
+- Phase 2: layered memory system
 
 ## Side work (UI)
 

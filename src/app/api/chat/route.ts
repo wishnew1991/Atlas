@@ -43,13 +43,14 @@ export async function POST(request: NextRequest) {
     ? body.history.filter(isHistoryItem).slice(-12).map((item) => ({ ...item, text: item.text.slice(0, 4000) }))
     : [];
 
+  const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || undefined : undefined;
   const wantsStream = body.stream === true || request.headers.get("accept")?.includes("text/event-stream");
 
   try {
     const actor = await getAtlasActor();
 
     if (!wantsStream) {
-      const response = await createAtlasReply(message, history, actor.userId, actor.capabilities);
+      const response = await createAtlasReply(message, history, actor.userId, actor.capabilities, { conversationId });
       return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
     }
 
@@ -59,19 +60,59 @@ export async function POST(request: NextRequest) {
         const send = (event: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 
         try {
-          for await (const chunk of streamAtlasReply(message, history, actor.userId, actor.capabilities, request.signal)) {
+          for await (const chunk of streamAtlasReply(
+            message,
+            history,
+            actor.userId,
+            actor.capabilities,
+            request.signal,
+            { conversationId }
+          )) {
             if (chunk.error) {
               send({ type: "error", text: chunk.error });
-            } else {
-              if (chunk.text) {
-                send({ type: "token", text: chunk.text });
-              }
-              if (chunk.done) {
-                send({ type: "done", action: chunk.action ?? null });
-              }
+              continue;
+            }
+
+            // Additive SSE event — older clients ignore unknown types.
+            if (chunk.stage) {
+              send({
+                type: "stage",
+                stage: chunk.stage.stage,
+                label: chunk.stage.label,
+                status: chunk.stage.status,
+                detail: chunk.stage.detail,
+                durationMs: chunk.stage.durationMs,
+                runId: chunk.runId,
+                conversationId: chunk.conversationId,
+                executionId: chunk.executionId,
+              });
+            }
+
+            if (chunk.runId && !chunk.text && !chunk.done && !chunk.stage) {
+              send({
+                type: "meta",
+                runId: chunk.runId,
+                conversationId: chunk.conversationId ?? null,
+                executionId: chunk.executionId ?? null,
+              });
+            }
+
+            if (chunk.text) {
+              send({ type: "token", text: chunk.text });
+            }
+
+            if (chunk.done) {
+              send({
+                type: "done",
+                action: chunk.action ?? null,
+                runId: chunk.runId ?? null,
+                conversationId: chunk.conversationId ?? null,
+                executionId: chunk.executionId ?? null,
+              });
             }
           }
-        } catch {
+        } catch (error) {
+          console.error("[api/chat] stream failed", error);
           send({ type: "error", text: "Atlas could not process this request." });
         } finally {
           controller.close();

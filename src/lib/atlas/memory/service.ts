@@ -324,6 +324,68 @@ export const memoryService = {
   },
 
   /**
+   * Store a user-visible memory without requiring an embedding model.
+   * Used by Profile so people can add preferences even when semantic search is offline.
+   */
+  async rememberPlain(
+    userId: string,
+    text: string,
+    opts: RememberOptions = {}
+  ): Promise<MemoryRecord> {
+    const expiresAt = opts.expiresInHours
+      ? new Date(Date.now() + opts.expiresInHours * 3600 * 1000)
+      : null;
+
+    let embedding: string | null = null;
+    try {
+      const model = await resolveEmbeddingModel();
+      if (model) {
+        const mapped = toLlmProvider(model.provider);
+        const { embeddings } = await embed({
+          model: model.id,
+          input: text,
+          apiKey: model.apiKey,
+          baseUrl: model.baseUrl || mapped.baseUrl,
+          provider: mapped.provider,
+        });
+        if (embeddings[0]) embedding = JSON.stringify(embeddings[0]);
+      }
+    } catch {
+      /* embeddings optional for profile-authored memories */
+    }
+
+    const row = await prisma.memory.create({
+      data: {
+        userId,
+        kind: opts.kind ?? "user",
+        type: opts.type ?? "preference",
+        text,
+        embedding,
+        importance: opts.importance ?? 0.6,
+        confidence: opts.confidence ?? 0.7,
+        expiresAt,
+      },
+    });
+
+    return toRecord(row);
+  },
+
+  /** List active personal memories for Profile UI. */
+  async listForUser(userId: string, limit = 40): Promise<MemoryRecord[]> {
+    const rows = await prisma.memory.findMany({
+      where: {
+        userId,
+        kind: "user",
+        status: "active",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+    });
+    return rows.map(toRecord);
+  },
+
+  /**
    * Orchestrated retrieval. Selects memories by the orchestrator's relevant
    * types for the category, then ranks them by a blend of semantic similarity,
    * confidence, importance, and access frequency. Expired/temporary memories and
@@ -363,7 +425,7 @@ export const memoryService = {
 
     const scored = rows
       .map((row) => {
-        const vector = decodeVector(row.embedding);
+        const vector = decodeVector(row.embedding ?? "[]");
         const similarity = cosineSimilarity(queryVector, vector);
         const record = toRecord(row);
         // Blend: semantic similarity (0.6) + confidence (0.15) + importance (0.15)
