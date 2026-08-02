@@ -175,11 +175,17 @@ Clerk is the selected authentication provider.
 - The payment layer must remain separate from recommendation and search tools.
 - Real production deployments need audit logs, idempotency keys, rate limits, and replay protection.
 
-## Current Storage Limitation
+## Current Storage
 
-Pending approvals currently use an in-memory server map with a 15-minute expiry. This is acceptable for local development and a single process only.
+Pending approvals are persisted via the Prisma `Approval` model on SQLite with a 15-minute expiry (`src/lib/atlas/approvals/service.ts`). That is durable across restarts.
 
-Before production or multi-instance deployment, replace it with a shared database or session store. Persist at least:
+Still in-memory for local development / single process only:
+
+- Food-session L1 cache (`src/lib/atlas/mcp/food-session.ts`)
+- Rate limiter (`src/lib/security/rate-limiter.ts`)
+- In-process execution job runner (no Redis)
+
+Before production or multi-instance deployment, move those to a shared store and enforce user authentication and payment limits at the MCP gateway. Persist at least:
 
 - User ID
 - Approval ID

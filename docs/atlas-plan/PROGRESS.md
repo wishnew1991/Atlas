@@ -1,8 +1,8 @@
 # Atlas Execution Engine — Implementation Progress
 
-## Active focus: Phase 1 Execution Engine Core
+## Active focus: Phase 1 complete; intent-aware memory shipped
 
-Infrastructure expansion (Redis, extra queues, security hardening, Postgres cutover) is **paused**.
+Infrastructure expansion (Redis, extra queues, security hardening, Postgres cutover) remains **paused**.
 
 ### Phase 1 checklist
 
@@ -18,6 +18,20 @@ Infrastructure expansion (Redis, extra queues, security hardening, Postgres cuto
 - [x] Tasks/Activity boards consume Executions (follow-up)
 - [x] Observe/reflect learning beyond status stubs (`src/lib/execution/reflect.ts`)
 - [x] Resume multi-step plans after approval (`fulfill_approval` + resume runner)
+
+### Intent-aware memory pipeline (shipped)
+
+Fixed execution plan steps (skip at runtime when not applicable):
+
+`understand` → `classify_intent` → `detect_domain` → `retrieve_safety_memory` → `retrieve_preference_memory` → `build_recommendation` → `select_tools` → `invoke_tools` → `compose_reply`
+
+- [x] Multi-signal intent classifier + low-confidence LLM refine (`memory-intent-core` / `memory-intent`)
+- [x] Domain detection for action routing vs preference category (`detect-domain`)
+- [x] Safety-only recall for execution (allergies, diet, visa, budget, accessibility, …)
+- [x] Domain preference recall only for recommendation / hybrid
+- [x] Recommendation Engine briefing (exploration balance + why-to-recommend contract)
+- [x] Confidence-based learning (one-offs do not replace long-term prefs)
+- [x] Ambiguous need-states clarify instead of pushing favorites
 
 ## Side work (not Phase 1)
 
@@ -38,6 +52,6 @@ Consumer profile UX landed while Phase 1 polish continues:
 
 ## Overall
 
-**Phase 1 core path: implemented.** Atlas chat turns are execution-centric with durable Executions, a real job path for steps, and an observe → reflect → learn lifecycle that persists events, plan notes, and preference memories.
+**Phase 1 core path: implemented.** Chat turns are execution-centric with durable Executions, observe → reflect → learn, and an intent-aware memory path that personalizes only when recommendation adds value.
 
-**Next (post Phase 1 polish):** none blocking — approval resume continues `fulfill_approval` then learn. Optional later: Postgres migration / production job backend; Phase 2 memory system.
+**Next:** optional Postgres / production job backend; deeper Phase 2 layered memory; keep plan docs in sync with the live pipeline.

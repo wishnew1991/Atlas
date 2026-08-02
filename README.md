@@ -9,6 +9,8 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the performance-core architecture (execution timeline, persistence, MCP caching, observability).
+
 ## Backend Configuration
 
 Atlas keeps all model and MCP credentials on the server. Users only see the chat experience.
@@ -20,7 +22,9 @@ Atlas keeps all model and MCP credentials on the server. Users only see the chat
 
 Without Clerk and model credentials, Atlas remains usable in demo mode. It shows the same chat, search, and approval experience but does not contact a model, MCP server, merchant, or payment provider. With Clerk configured, the menu includes a sign-in control and every live chat and approval is associated with the signed-in account.
 
-Every spend or booking action requires an explicit approval tap. Atlas keeps pending approvals on the server for 15 minutes so the browser cannot alter their details. For production, replace this in-memory store with a shared database or session store, and make the MCP gateway authenticate the user and enforce payment limits.
+Every spend or booking action requires an explicit approval tap. Pending approvals are persisted via the Prisma `Approval` model on SQLite and expire after 15 minutes, so the browser cannot alter their details. The MCP gateway is responsible for authenticating the user and enforcing payment limits.
+
+In-memory state (local development only, single process): the food-session L1 cache, the rate limiter, and the in-process execution job runner (no Redis required).
 
 ## Routes
 
