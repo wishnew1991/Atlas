@@ -1,10 +1,5 @@
-import { SignIn } from "@clerk/nextjs";
-import { notFound } from "next/navigation";
+import { AuthScreen } from "@/components/atlas/auth-screen";
 
 export default function SignInPage() {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    notFound();
-  }
-
-  return <SignIn />;
+  return <AuthScreen mode="sign-in" />;
 }

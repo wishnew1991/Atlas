@@ -59,6 +59,7 @@ export function ProfileBoard() {
 
   const [memoryText, setMemoryText] = useState("");
   const [addingMemory, setAddingMemory] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
 
   const applyProfile = useCallback((next: ProfileSnapshot) => {
     setProfile(next);
@@ -156,7 +157,17 @@ export function ProfileBoard() {
 
   const saveYou = (event: FormEvent) => {
     event.preventDefault();
-    void patch({ name, phone, email });
+    void (async () => {
+      const ok = await patch({ name, phone, email });
+      if (ok) setEditingDetails(false);
+    })();
+  };
+
+  const cancelEditDetails = () => {
+    setName(profile.name);
+    setPhone(profile.phone);
+    setEmail(profile.email);
+    setEditingDetails(false);
   };
 
   const addAddress = (event: FormEvent) => {
@@ -244,41 +255,91 @@ export function ProfileBoard() {
 
       <section className="atlas-profile-block">
         <div className="atlas-profile-block__head">
-          <h2 className="atlas-profile-block__title">Details</h2>
-        </div>
-        <form className="atlas-profile-form" onSubmit={saveYou}>
-          <label className="atlas-profile-field">
-            <span>Name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-          </label>
-          <div className="atlas-profile-form__row">
-            <label className="atlas-profile-field">
-              <span>Phone</span>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 …"
-                inputMode="tel"
-              />
-            </label>
-            <label className="atlas-profile-field">
-              <span>Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
+          <div>
+            <h2 className="atlas-profile-block__title">Details</h2>
+            <p className="atlas-profile-block__lede">From your account — edit anytime.</p>
           </div>
-          {detailsDirty ? (
+          {!editingDetails ? (
+            <button
+              type="button"
+              className="atlas-inline-action"
+              disabled={saving}
+              onClick={() => setEditingDetails(true)}
+            >
+              Edit
+            </button>
+          ) : null}
+        </div>
+
+        {editingDetails ? (
+          <form className="atlas-profile-composer" onSubmit={saveYou}>
+            <label className="atlas-profile-field">
+              <span>Name</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                autoFocus
+              />
+            </label>
+            <div className="atlas-profile-form__row">
+              <label className="atlas-profile-field">
+                <span>Phone</span>
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 …"
+                  inputMode="tel"
+                />
+              </label>
+              <label className="atlas-profile-field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+            </div>
             <div className="atlas-profile-form__actions">
-              <button type="submit" className="atlas-action atlas-action--primary" disabled={saving}>
+              <button
+                type="button"
+                className="atlas-action atlas-action--ghost"
+                disabled={saving}
+                onClick={cancelEditDetails}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="atlas-action atlas-action--primary"
+                disabled={saving || !detailsDirty}
+              >
                 Save details
               </button>
             </div>
-          ) : null}
-        </form>
+          </form>
+        ) : (
+          <ul className="atlas-profile-list atlas-profile-list--details">
+            {(
+              [
+                ["Name", profile.name],
+                ["Email", profile.email],
+                ["Phone", profile.phone],
+              ] as const
+            ).map(([label, value]) => (
+              <li className="atlas-profile-list__item" key={label}>
+                <div className="atlas-profile-list__meta">
+                  <span className="atlas-profile-list__body">{label}</span>
+                  <span className="atlas-profile-list__title">
+                    {value.trim() || <span className="atlas-profile-empty-inline">Not set</span>}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="atlas-profile-block">

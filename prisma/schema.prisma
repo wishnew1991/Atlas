@@ -16,6 +16,25 @@ model AtlasUser {
   conversations Conversation[]
 }
 
+
+/// Consumer profile: identity, addresses, payment methods, privacy toggles.
+model UserProfile {
+  id            String   @id @default(cuid())
+  /// Clerk user id, or "atlas-demo-user" for local/guest.
+  userId        String   @unique
+  name          String   @default("")
+  phone         String   @default("")
+  email         String   @default("")
+  /// JSON: [{ id, label, line }]
+  addressesJson String   @default("[]")
+  /// JSON: [{ id, kind: "upi"|"card", label, value }] — UPI VPA or card last4+brand only.
+  paymentsJson  String   @default("[]")
+  /// JSON privacy toggles.
+  privacyJson   String   @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model Credential {
   id        String       @id @default(cuid())
   label     String

@@ -2112,6 +2112,20 @@ select:focus-visible {
   font-size: 0.86rem;
 }
 
+
+.atlas-profile-empty-inline {
+  color: var(--faint);
+  font-weight: 550;
+}
+
+.atlas-profile-list--details .atlas-profile-list__body {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+
 .atlas-profile-list {
   list-style: none;
   display: grid;

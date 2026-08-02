@@ -1,10 +1,5 @@
-import { SignUp } from "@clerk/nextjs";
-import { notFound } from "next/navigation";
+import { AuthScreen } from "@/components/atlas/auth-screen";
 
 export default function SignUpPage() {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    notFound();
-  }
-
-  return <SignUp />;
+  return <AuthScreen mode="sign-up" />;
 }
