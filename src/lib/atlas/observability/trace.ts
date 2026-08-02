@@ -5,7 +5,12 @@ import { prisma } from "@/lib/atlas/server/prisma";
 export type ExecutionStageId =
   | "understanding"
   | "planning"
+  | "intent"
+  | "domain"
   | "memory"
+  | "safety_memory"
+  | "preference_memory"
+  | "recommendation"
   | "routing"
   | "loading_tools"
   | "reasoning"
@@ -18,7 +23,12 @@ export type ExecutionStageId =
 export const STAGE_LABELS: Record<ExecutionStageId, string> = {
   understanding: "Understanding request…",
   planning: "Planning next steps…",
-  memory: "Checking preferences…",
+  intent: "Classifying intent…",
+  domain: "Detecting domain…",
+  memory: "Resolving memory…",
+  safety_memory: "Loading safety constraints…",
+  preference_memory: "Loading preferences…",
+  recommendation: "Building recommendations…",
   routing: "Choosing model & route…",
   loading_tools: "Loading connected tools…",
   reasoning: "Thinking…",

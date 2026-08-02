@@ -3,6 +3,8 @@ import "server-only";
 import { analyzeIntent, type IntentResult } from "@/lib/atlas/intent/analyzer";
 import type { AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
 import { resolveConversationState } from "@/lib/atlas/conversation/state";
+import type { MemoryIntent } from "@/lib/atlas/intent/memory-intent";
+import { wantsLiveRecommendationTools } from "@/lib/atlas/intent/memory-intent-core";
 
 /**
  * Capabilities describe WHAT a request is about, not HOW it is fulfilled. They are
@@ -41,28 +43,38 @@ export interface Plan {
   isContinuation: boolean;
 }
 
+function withRecommendationWeb(
+  capabilities: Capability[],
+  memoryIntent?: MemoryIntent | null
+): Capability[] {
+  if (!memoryIntent || !wantsLiveRecommendationTools(memoryIntent)) return capabilities;
+  if (capabilities.includes("web")) return capabilities;
+  if (capabilities.length === 1 && capabilities[0] === "none") return ["web"];
+  return [...capabilities, "web"];
+}
+
 /**
  * The Planner produces an *advisory* set of capabilities for the request. It does
  * NOT decide whether tools are used — that belongs to the reasoning LLM via
- * tool_choice "auto". Memory is retrieved independently and injected before this
- * step, so the LLM has personal context regardless of the capabilities listed.
+ * tool_choice "auto". Memory intent is classified in the execution pipeline
+ * (`classify_intent`); pass it here only when already known so web can be enabled.
  *
  * Planning operates on the CONVERSATION, not the final utterance. A bare
  * confirmation ("yes", "go ahead", "book it") inherits the capabilities of the
- * task already in flight, so tools stay available on the exact turn the user
- * approves an action. Conversational understanding is delegated to
- * `resolveConversationState` — the single source of truth shared with the
- * agent's domain routing.
+ * task already in flight.
  */
-export async function plan(message: string, history: AtlasChatHistoryItem[] = []): Promise<Plan> {
+export async function plan(
+  message: string,
+  history: AtlasChatHistoryItem[] = [],
+  precomputedState?: Awaited<ReturnType<typeof resolveConversationState>>,
+  memoryIntent?: MemoryIntent | null
+): Promise<Plan> {
   const intent = analyzeIntent(message);
-  const state = await resolveConversationState(message, history);
+  const state = precomputedState ?? (await resolveConversationState(message, history));
 
-  // A continuation inherits the active task's capabilities regardless of what
-  // the (context-free) intent analyzer thinks of the bare utterance.
   if (state.isContinuation && state.capabilities.length > 0) {
     return {
-      capabilities: state.capabilities,
+      capabilities: withRecommendationWeb(state.capabilities, memoryIntent),
       intent,
       reason: state.reason,
       isContinuation: true,
@@ -71,24 +83,24 @@ export async function plan(message: string, history: AtlasChatHistoryItem[] = []
 
   if (state.capabilities.length > 0) {
     return {
-      capabilities: state.capabilities,
+      capabilities: withRecommendationWeb(state.capabilities, memoryIntent),
       intent,
       reason: state.reason,
       isContinuation: false,
     };
   }
 
-  // Identity / pure small talk: no capability required.
   if (intent.kind === "chat") {
     return {
-      capabilities: ["none"],
+      capabilities: withRecommendationWeb(["none"], memoryIntent),
       intent,
-      reason: "Conversational message — no capability required.",
+      reason: memoryIntent && wantsLiveRecommendationTools(memoryIntent)
+        ? "Recommendation ask — enabling web lookup for live context."
+        : "Conversational message — no capability required.",
       isContinuation: false,
     };
   }
 
-  // General knowledge / fallback: allow web lookup.
   return {
     capabilities: ["web"],
     intent,

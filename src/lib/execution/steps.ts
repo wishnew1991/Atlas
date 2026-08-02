@@ -12,7 +12,14 @@ import { getToolsForCapabilities, executeTool } from "@/lib/atlas/tools/registry
 import { estimateMessagesTokens, historyToLlmMessages } from "@/lib/atlas/conversation/history";
 import { beginStage, endStage } from "@/lib/atlas/observability/trace";
 import { buildFoodSessionContextFromSession, buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
-import { extractAndStoreMemories, retrieveMemories } from "@/lib/atlas/server/agent/memory";
+import {
+  extractAndStoreMemories,
+  classifyMemoryIntent,
+  retrieveSafetyMemories,
+  retrievePreferenceMemories,
+} from "@/lib/atlas/server/agent/memory";
+import { buildRecommendationContext } from "@/lib/atlas/recommendation/engine";
+import { detectDomain } from "@/lib/atlas/intent/detect-domain";
 import {
   extractDishQuery,
   isMenuIndexSelection,
@@ -38,7 +45,7 @@ import {
   updateExecutionStatus,
   updateExecutionSteps,
 } from "./manager";
-import { getTurnContext } from "./turn-context";
+import { getTurnContext, mergeMemoryLines } from "./turn-context";
 import type { ExecutionStepJobData } from "@/lib/queue/in-process";
 import type { StepOutcome } from "./types";
 
@@ -115,7 +122,7 @@ export async function handleExecutionStepJob(data: ExecutionStepJobData): Promis
         const state = await resolveConversationState(ctx.message, ctx.history);
         ctx.domain = state.domain;
         ctx.trace.domain = state.domain;
-        ctx.planned = await plan(ctx.message, ctx.history, state);
+        ctx.planned = await plan(ctx.message, ctx.history, state, ctx.memoryIntent);
         ctx.emit({
           kind: "stage",
           stage: endStage(
@@ -127,12 +134,223 @@ export async function handleExecutionStepJob(data: ExecutionStepJobData): Promis
         });
         break;
       }
-      case "retrieve_memory": {
-        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "memory") });
-        ctx.memories = await retrieveMemories(ctx.userId, ctx.message, ctx.domain);
+      case "classify_intent": {
+        // Single entry point for memory-intent decisions this turn.
+        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "intent") });
+        let classifyModel = ctx.activeModel;
+        if (!classifyModel) {
+          try {
+            classifyModel = await resolveActiveModel(
+              ctx.domain as "food" | "travel" | "shopping" | "rides" | "appointments"
+            );
+          } catch {
+            classifyModel = null;
+          }
+        }
+        const intent = await classifyMemoryIntent({
+          message: ctx.message,
+          history: ctx.history,
+          domainHint: ctx.domain,
+          model: classifyModel,
+        });
+        ctx.memoryIntent = intent;
+
+        if (intent.kind === "ambiguous" || intent.needsClarification) {
+          ctx.memoryMode = "clarify";
+        } else if (intent.kind === "conversational") {
+          ctx.memoryMode = "none";
+        } else if (intent.kind === "execution") {
+          ctx.memoryMode = "safety";
+        } else {
+          ctx.memoryMode = "recommendation";
+        }
+
+        await updateExecutionState(executionId, {
+          variables: {
+            memoryIntent: intent.kind,
+            memoryIntentConfidence: intent.confidence,
+            memoryIntentSource: intent.source,
+          },
+        });
+
         ctx.emit({
           kind: "stage",
-          stage: endStage(ctx.trace, "memory", "completed", `${ctx.memories.length} facts`),
+          stage: endStage(
+            ctx.trace,
+            "intent",
+            "completed",
+            `${intent.kind} (${intent.source}, ${intent.confidence.toFixed(2)})`
+          ),
+        });
+        break;
+      }
+      case "detect_domain": {
+        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "domain") });
+        const detected = await detectDomain({
+          message: ctx.message,
+          history: ctx.history,
+          memoryIntent: ctx.memoryIntent,
+          conversationDomainHint: ctx.domain,
+        });
+        ctx.domain = detected.actionDomain;
+        ctx.preferenceDomain = detected.preferenceDomain;
+        ctx.trace.domain = detected.actionDomain;
+
+        if (ctx.memoryIntent) {
+          ctx.memoryIntent = {
+            ...ctx.memoryIntent,
+            domain: detected.preferenceDomain,
+          };
+        }
+
+        // Re-plan capabilities now that intent + domain are known.
+        const state = await resolveConversationState(ctx.message, ctx.history);
+        ctx.planned = await plan(ctx.message, ctx.history, state, ctx.memoryIntent);
+
+        await updateExecutionState(executionId, {
+          variables: {
+            domain: detected.actionDomain,
+            preferenceDomain: detected.preferenceDomain,
+            domainReason: detected.reason,
+          },
+        });
+
+        ctx.emit({
+          kind: "stage",
+          stage: endStage(
+            ctx.trace,
+            "domain",
+            "completed",
+            `${detected.actionDomain}/${detected.preferenceDomain}`
+          ),
+        });
+        break;
+      }
+      case "retrieve_safety_memory": {
+        const intent = ctx.memoryIntent;
+        const preferenceDomain = ctx.preferenceDomain || intent?.domain || "general";
+        const shouldLoad =
+          intent?.kind === "execution" ||
+          intent?.kind === "hybrid" ||
+          // Food/travel/rides recommendations still need hard constraints (allergies, visa, etc.).
+          (intent?.kind === "recommendation" &&
+            (preferenceDomain === "food" ||
+              preferenceDomain === "travel" ||
+              preferenceDomain === "rides"));
+        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "safety_memory") });
+        if (!shouldLoad) {
+          ctx.safetyMemories = [];
+          mergeMemoryLines(ctx);
+          ctx.emit({
+            kind: "stage",
+            stage: endStage(ctx.trace, "safety_memory", "completed", "skipped"),
+          });
+          await markStep(executionId, stepId, "skipped", "success", {
+            reason: intent?.kind ?? "none",
+          });
+          await incrementExecutionProgress(executionId);
+          return;
+        }
+        ctx.safetyMemories = await retrieveSafetyMemories(
+          ctx.userId,
+          ctx.message,
+          preferenceDomain
+        );
+        mergeMemoryLines(ctx);
+        if (ctx.memoryMode !== "recommendation") {
+          ctx.memoryMode = ctx.safetyMemories.length ? "safety" : "none";
+        }
+        ctx.emit({
+          kind: "stage",
+          stage: endStage(
+            ctx.trace,
+            "safety_memory",
+            "completed",
+            `${ctx.safetyMemories.length} constraints`
+          ),
+        });
+        break;
+      }
+      case "retrieve_preference_memory": {
+        const intent = ctx.memoryIntent;
+        const preferenceDomain = ctx.preferenceDomain || intent?.domain || "general";
+        const shouldLoad = intent?.kind === "recommendation" || intent?.kind === "hybrid";
+        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "preference_memory") });
+        if (!shouldLoad) {
+          ctx.preferenceMemories = [];
+          mergeMemoryLines(ctx);
+          ctx.emit({
+            kind: "stage",
+            stage: endStage(ctx.trace, "preference_memory", "completed", "skipped"),
+          });
+          await markStep(executionId, stepId, "skipped", "success", {
+            reason: intent?.kind ?? "none",
+          });
+          await incrementExecutionProgress(executionId);
+          return;
+        }
+        ctx.preferenceMemories = await retrievePreferenceMemories(
+          ctx.userId,
+          ctx.message,
+          preferenceDomain
+        );
+        ctx.memoryMode = "recommendation";
+        mergeMemoryLines(ctx);
+        ctx.emit({
+          kind: "stage",
+          stage: endStage(
+            ctx.trace,
+            "preference_memory",
+            "completed",
+            `${preferenceDomain}:${ctx.preferenceMemories.length}`
+          ),
+        });
+        break;
+      }
+      case "build_recommendation": {
+        const intentKind = ctx.memoryIntent?.kind;
+        const shouldBuild = intentKind === "recommendation" || intentKind === "hybrid";
+        ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "recommendation") });
+        if (!shouldBuild) {
+          ctx.emit({
+            kind: "stage",
+            stage: endStage(ctx.trace, "recommendation", "completed", "skipped"),
+          });
+          await markStep(executionId, stepId, "skipped", "success", { reason: intentKind ?? "none" });
+          await incrementExecutionProgress(executionId);
+          return;
+        }
+
+        const domain =
+          (ctx.preferenceDomain as
+            | "food"
+            | "travel"
+            | "shopping"
+            | "entertainment"
+            | "rides"
+            | "general") ||
+          ctx.memoryIntent?.domain ||
+          "general";
+        const recommendation = await buildRecommendationContext({
+          userId: ctx.userId,
+          message: ctx.message,
+          domain,
+          history: ctx.history,
+          conversationSummary: ctx.conversationSummary,
+          preferenceLines: ctx.preferenceMemories,
+          safetyLines: ctx.safetyMemories,
+        });
+        ctx.recommendation = recommendation;
+        ctx.memoryMode = "recommendation";
+        mergeMemoryLines(ctx);
+        ctx.emit({
+          kind: "stage",
+          stage: endStage(
+            ctx.trace,
+            "recommendation",
+            "completed",
+            `explore=${recommendation.explorationWeight.toFixed(2)}`
+          ),
         });
         break;
       }
@@ -149,7 +367,17 @@ export async function handleExecutionStepJob(data: ExecutionStepJobData): Promis
         }
         ctx.trace.modelId = ctx.activeModel.id;
         ctx.emit({ kind: "stage", stage: beginStage(ctx.trace, "loading_tools") });
-        ctx.tools = await getToolsForCapabilities(ctx.planned.capabilities);
+        let capabilities = ctx.planned.capabilities;
+        const { wantsLiveRecommendationTools } = await import("@/lib/atlas/intent/memory-intent");
+        if (
+          ctx.memoryIntent &&
+          wantsLiveRecommendationTools(ctx.memoryIntent) &&
+          !capabilities.includes("web")
+        ) {
+          capabilities = [...capabilities.filter((c) => c !== "none"), "web"];
+          ctx.planned = { ...ctx.planned, capabilities };
+        }
+        ctx.tools = await getToolsForCapabilities(capabilities);
         ctx.emit({
           kind: "stage",
           stage: endStage(ctx.trace, "loading_tools", "completed", `${ctx.tools.length} tools`),
@@ -162,7 +390,10 @@ export async function handleExecutionStepJob(data: ExecutionStepJobData): Promis
           ctx.domain === "food" || ctx.planned.capabilities.includes("food")
             ? buildFoodSessionContextFromSession(getFoodSession(ctx.userId))
             : undefined;
-        const systemPrompt = buildSystemPrompt(ctx.memories, sessionCtx);
+        const systemPrompt = buildSystemPrompt(ctx.memories, sessionCtx, {
+          memoryMode: ctx.memoryMode,
+          recommendationBriefing: ctx.recommendation?.briefing,
+        });
         const llmMessages = historyToLlmMessages(
           systemPrompt,
           ctx.history,

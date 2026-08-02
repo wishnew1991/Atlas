@@ -9,6 +9,8 @@ import type { ToolExecResult } from "@/lib/atlas/tools/registry";
 import type { ActiveModel } from "@/lib/atlas/server/agent/reply";
 import type { RunTrace, StageEvent } from "@/lib/atlas/observability/trace";
 import type { LlmTool } from "@/lib/atlas/llm/types";
+import type { MemoryIntent, MemoryRecallMode } from "@/lib/atlas/server/agent/memory";
+import type { RecommendationContext } from "@/lib/atlas/recommendation/engine";
 
 export type TurnContext = {
   executionId: string;
@@ -19,10 +21,18 @@ export type TurnContext = {
   conversationId: string;
   conversationSummary: string;
   domain: string;
+  /** Domain used for preference/recommendation memory (may differ from action routing). */
+  preferenceDomain: string;
   planned: Plan | null;
   activeModel: ActiveModel | null;
   tools: LlmTool[];
-  memories: Awaited<ReturnType<typeof import("@/lib/atlas/server/agent/memory").retrieveMemories>>;
+  /** Merged lines for the system prompt */
+  memories: string[];
+  safetyMemories: string[];
+  preferenceMemories: string[];
+  memoryMode: MemoryRecallMode;
+  memoryIntent: MemoryIntent | null;
+  recommendation: RecommendationContext | null;
   toolCalls: Array<{ id: string; name: string; arguments: string }>;
   toolResults: ToolExecResult[];
   action?: AtlasPendingAction;
@@ -48,4 +58,17 @@ export function getTurnContext(executionId: string): TurnContext | undefined {
 
 export function clearTurnContext(executionId: string) {
   contexts.delete(executionId);
+}
+
+export function mergeMemoryLines(ctx: TurnContext) {
+  const merged = [...ctx.safetyMemories];
+  for (const line of ctx.preferenceMemories) {
+    if (!merged.includes(line)) merged.push(line);
+  }
+  if (ctx.recommendation) {
+    for (const line of ctx.recommendation.lines) {
+      if (!merged.includes(line)) merged.push(line);
+    }
+  }
+  ctx.memories = merged;
 }

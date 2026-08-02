@@ -168,10 +168,16 @@ export async function* streamChatExecution(
     conversationId: conversation.id,
     conversationSummary: conversation.summary,
     domain: "shopping",
+    preferenceDomain: "general",
     planned: null,
     activeModel: null,
     tools: [],
     memories: [],
+    safetyMemories: [],
+    preferenceMemories: [],
+    memoryMode: "none",
+    memoryIntent: null,
+    recommendation: null,
     toolCalls: [],
     toolResults: [],
     reply: "",
@@ -204,6 +210,8 @@ export async function* streamChatExecution(
       }
 
       const state = await resolveConversationState(message, history);
+      // Capabilities are planned from conversation state; memory intent is classified
+      // later as its own pipeline step (single entry point for preference loading).
       const advisory = await planCapabilities(message, history, state);
       const domain =
         state.domain ||
@@ -218,7 +226,9 @@ export async function* streamChatExecution(
         domain,
       });
       await updateExecutionPlan(execution.id, execPlan);
-      await updateExecutionState(execution.id, { variables: { domain } });
+      await updateExecutionState(execution.id, {
+        variables: { domain },
+      });
       await updateExecutionStatus(execution.id, "executing");
 
       try {
@@ -443,10 +453,16 @@ function buildResumeContext(execution: Execution): TurnContext {
     conversationId,
     conversationSummary: "",
     domain,
+    preferenceDomain: domain === "appointments" ? "general" : domain,
     planned: null,
     activeModel: null,
     tools: [],
     memories: [],
+    safetyMemories: [],
+    preferenceMemories: [],
+    memoryMode: "none",
+    memoryIntent: null,
+    recommendation: null,
     toolCalls: [],
     toolResults: [],
     reply: "",

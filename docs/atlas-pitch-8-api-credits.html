@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atlas — 8-Slide Pitch (API Credits)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0c1210;
+      --fog: #d7e0da;
+      --mist: #9aaca0;
+      --paper: #f3f6f2;
+      --accent: #1f8a6e;
+      --accent-soft: #c8ebe0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page {
+      size: 13.333in 7.5in;
+      margin: 0;
+    }
+
+    html, body {
+      background: #111;
+      color: var(--paper);
+      font-family: "Manrope", system-ui, sans-serif;
+    }
+
+    .slide {
+      width: 13.333in;
+      height: 7.5in;
+      padding: 0.7in 0.85in;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(ellipse 70% 45% at 100% 0%, rgba(31, 138, 110, 0.16), transparent 55%),
+        var(--ink);
+      page-break-after: always;
+      break-after: page;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+
+    .slide.light {
+      background: var(--paper);
+      color: var(--ink);
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    h1 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: 64px;
+      line-height: 1.05;
+      max-width: 14ch;
+      margin-top: 18px;
+    }
+
+    h2 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: 42px;
+      line-height: 1.1;
+      max-width: 22ch;
+      margin-top: 12px;
+    }
+
+    .lede {
+      font-size: 18px;
+      line-height: 1.45;
+      color: var(--fog);
+      max-width: 48ch;
+      margin-top: 16px;
+    }
+
+    .slide.light .lede { color: #3a4a40; }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--mist);
+      font-weight: 600;
+    }
+
+    .slide.light .meta { color: #5a6b60; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .card {
+      border: 1px solid rgba(215, 224, 218, 0.16);
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: rgba(22, 30, 26, 0.7);
+    }
+
+    .slide.light .card {
+      background: #fff;
+      border-color: rgba(12, 18, 16, 0.1);
+    }
+
+    .card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .card p {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--fog);
+    }
+
+    .slide.light .card p { color: #3a4a40; }
+
+    ul.clean {
+      list-style: none;
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+      max-width: 58ch;
+    }
+
+    ul.clean li {
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.4;
+      color: var(--fog);
+      font-size: 15px;
+    }
+
+    .slide.light ul.clean li { color: #3a4a40; }
+
+    ul.clean li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.5em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .pipeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 138, 110, 0.45);
+      color: var(--accent-soft);
+      background: rgba(31, 138, 110, 0.14);
+    }
+
+    .slide.light .chip {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: transparent;
+    }
+
+    .ask-box {
+      margin-top: 20px;
+      padding: 18px 20px;
+      border-left: 3px solid var(--accent);
+      background: rgba(31, 138, 110, 0.12);
+      max-width: 56ch;
+    }
+
+    .ask-box strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .ask-box p {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--fog);
+    }
+
+    .slide.light .ask-box p { color: #3a4a40; }
+
+    .tiny {
+      font-size: 12px;
+      color: var(--mist);
+      margin-top: 14px;
+      max-width: 60ch;
+      line-height: 1.4;
+    }
+
+    .slide.light .tiny { color: #5a6b60; }
+
+    em.serif {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-style: italic;
+    }
+
+    /* Screen preview navigation */
+    @media screen {
+      body {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+      .slide {
+        box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+        flex-shrink: 0;
+      }
+      .screen-hint {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        font-size: 12px;
+        color: var(--mist);
+        background: rgba(0,0,0,0.6);
+        padding: 8px 12px;
+        border-radius: 8px;
+        z-index: 10;
+      }
+    }
+
+    @media print {
+      body { background: none; padding: 0; }
+      .screen-hint { display: none !important; }
+      .slide {
+        box-shadow: none;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen-hint">Print → Save as PDF · Landscape · No margins · Background graphics ON</div>
+
+  <!-- 1 -->
+  <section class="slide">
+    <div>
+      <p class="eyebrow">Atlas · Partner / credits pitch</p>
+      <h1>Atlas</h1>
+      <p class="lede">A personal AI execution engine for food, travel, shopping, and rides — with approvals before spend, and memory that only personalizes when you ask it to suggest.</p>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>01 · Title</span></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div>
+      <p class="eyebrow">Problem</p>
+      <h2>Chatbots answer. Life still needs twelve apps — and a credit card you trust.</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Action is fragmented</h3>
+          <p>Ordering, booking, buying, and scheduling live in separate products with separate carts and payments.</p>
+        </div>
+        <div class="card">
+          <h3>Agents over-personalize</h3>
+          <p>Most memory systems either forget you or push yesterday’s favorite every time — even when you asked to explore.</p>
+        </div>
+        <div class="card">
+          <h3>Trust gap on spend</h3>
+          <p>Users won’t let an agent spend without clear approvals, constraints, and receipts.</p>
+        </div>
+        <div class="card">
+          <h3>Frontier models are the bottleneck</h3>
+          <p>Great planning, tool use, and recommendation reasoning need frontier-class models — credits unlock iteration speed.</p>
+        </div>
+      </div>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>02 · Problem</span></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide light">
+    <div>
+      <p class="eyebrow">Solution</p>
+      <h2>Execution engine. Chat is just the interface.</h2>
+      <ul class="clean">
+        <li>Every request becomes a durable Execution: plan → tools → approve → learn</li>
+        <li>Intent-aware memory: conversational / recommendation / execution / hybrid / ambiguous</li>
+        <li>Recommendation Engine balances familiarity with exploration — and explains why</li>
+        <li>Human-in-the-loop approvals before any payment or booking completes</li>
+        <li>MCP tools for live search, food ordering, browse automation, travel, and more</li>
+      </ul>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>03 · Solution</span></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div>
+      <p class="eyebrow">How it works</p>
+      <h2>Intent → domain → the right memory → tools → reply.</h2>
+      <div class="pipeline">
+        <span class="chip">Understand</span>
+        <span class="chip">Classify intent</span>
+        <span class="chip">Detect domain</span>
+        <span class="chip">Safety memory</span>
+        <span class="chip">Preference memory</span>
+        <span class="chip">Recommend</span>
+        <span class="chip">Tools</span>
+        <span class="chip">Compose</span>
+      </div>
+      <div class="grid-2" style="margin-top:20px">
+        <div class="card">
+          <h3>“Order biryani”</h3>
+          <p>Execution intent. Safety constraints only (allergies, diet, budget). No favorite-pushing.</p>
+        </div>
+        <div class="card">
+          <h3>“What should I eat?”</h3>
+          <p>Recommendation intent. Domain prefs + exploration + live ratings. Why behind each pick.</p>
+        </div>
+      </div>
+      <p class="tiny">Ambiguous (“I’m hungry”) → clarify once. One-off orders stay low-confidence and never overwrite long-term prefs.</p>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>04 · Architecture</span></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide light">
+    <div>
+      <p class="eyebrow">Why Atlas</p>
+      <h2>Differentiation that needs frontier reasoning.</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>Execution-first</h3>
+          <p>Durable plans, step runners, post-approval resume — not a chat log with tools bolted on.</p>
+        </div>
+        <div class="card">
+          <h3>Trust by design</h3>
+          <p>Approvals, receipts, safety memory (allergies, visa, spending limits) before irreversible actions.</p>
+        </div>
+        <div class="card">
+          <h3>Human-like memory</h3>
+          <p>Confidence-weighted prefs. Suggest only when asked. Explore beyond historical favorites.</p>
+        </div>
+      </div>
+      <p class="tiny" style="margin-top:18px">These loops are tool-heavy and multi-step. Quality jumps with frontier models for planning, intent classification, recommendation briefings, and tool selection.</p>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>05 · Moat</span></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div>
+      <p class="eyebrow">Status</p>
+      <h2>Working product. Architecture ready to scale.</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Shipped</h3>
+          <p>Next.js app: chat, voice, food MCP flow, approvals, activity/receipts, profile, admin routing. Phase 1 execution engine with intent → domain → memory → recommendation pipeline.</p>
+        </div>
+        <div class="card">
+          <h3>What we’re validating next</h3>
+          <p>Recommendation quality, tool reliability across domains, approval conversion, and end-to-end food/travel completion rates under frontier models.</p>
+        </div>
+      </div>
+      <p class="tiny">Early stage — no vanity metrics. We’re optimizing for completed executions, not message volume.</p>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>06 · Status</span></div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide light">
+    <div>
+      <p class="eyebrow">The ask</p>
+      <h2>Frontier model access or free API credits.</h2>
+      <div class="ask-box">
+        <strong>Not raising cash in this ask — raising capability.</strong>
+        <p>We want sponsored access to frontier models (and/or free API credits) so Atlas can run high-quality multi-step executions, recommendation reasoning, and tool loops without burning the founding budget on tokens.</p>
+      </div>
+      <ul class="clean">
+        <li><strong>Preferred:</strong> credits or partner access for GPT-class / Claude-class / Gemini-class frontier models</li>
+        <li><strong>Also useful:</strong> embedding + speech credits for memory and voice</li>
+        <li><strong>In return:</strong> case studies, demos, public attribution, feedback on agent/tool-use workloads, and roadmap visibility</li>
+      </ul>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>07 · Ask</span></div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div>
+      <p class="eyebrow">Close</p>
+      <h1 style="max-width:15ch">Remember like a human.<br />Act with permission.</h1>
+      <p class="lede">Help us ship the personal execution layer for everyday life — powered by frontier models that can plan, choose, and explain.</p>
+      <div class="ask-box" style="margin-top:24px">
+        <strong>Next step</strong>
+        <p>Intro call + sandbox access. We’ll share architecture, live demo, and a credits usage plan (eval workloads, monthly ceiling, reporting).</p>
+      </div>
+    </div>
+    <div class="meta"><span>ATLAS</span><span>08 · Thank you · vish.cmcit@gmail.com</span></div>
+  </section>
+</body>
+</html>
