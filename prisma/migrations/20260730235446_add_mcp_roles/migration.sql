@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "McpServer" ADD COLUMN "roles" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "McpServer" ADD COLUMN "toolRoles" TEXT NOT NULL DEFAULT '{}';

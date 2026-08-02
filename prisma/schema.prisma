@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model AtlasUser {
+  id          String   @id @default(cuid())
+  clerkId    String   @unique
+  email       String?
+  name        String?
+  createdAt   DateTime @default(now())
+  approvals   Approval[]
+  conversations Conversation[]
+}
+
+model Credential {
+  id        String       @id @default(cuid())
+  label     String
+  provider  String
+  apiKey    String
+  baseUrl   String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  models    ModelConfig[]
+}
+
+model ModelConfig {
+  id           String     @id
+  credentialId String
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  label        String
+  enabled      Boolean    @default(true)
+  isDefault    Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  routing      RoutingRule[]
+}
+
+model RoutingRule {
+  id        String   @id @default(cuid())
+  domain    String
+  modelId   String
+  model     ModelConfig @relation(fields: [modelId], references: [id], onDelete: Cascade)
+}
+
+model Domain {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  builtIn   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model VoiceConfig {
+  id          Int      @id @default(1)
+  sttLanguage String   @default("en-US")
+  ttsVoiceURI String   @default("")
+  ttsRate     Float    @default(1)
+  ttsPitch    Float    @default(1)
+}
+
+model Approval {
+  id          String    @id
+  userId      String?
+  user        AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain      String
+  title       String
+  summary     String
+  fields      String
+  status      String    @default("pending")
+  reference   String?
+  /// Arbitrary JSON for domain-specific execution state, e.g. Swiggy UPI
+  /// handoff (orderId, paasId, cartId, lat, lng, upiLink, upiQr, paymentRef).
+  meta        String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String?
+  user      AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  createdAt      DateTime @default(now())
+}
+
+model ActivityItem {
+  id        String   @id @default(cuid())
+  userId    String?
+  time      String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model McpServer {
+  id          String   @id @default(cuid())
+  name        String
+  url         String?
+  token       String?
+  command     String
+  args        String   @default("")
+  env         String   @default("")
+  domain      String   @default("shopping")
+  /// JSON array of inferred roles, e.g. ["agent", "knowledge"].
+  roles       String   @default("[]")
+  /// JSON object mapping tool name -> tool categories.
+  toolRoles   String   @default("{}")
+  global      Boolean  @default(false)
+  enabled     Boolean  @default(true)
+  toolCount   Int      @default(0)
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model McpOAuthClient {
+  id         Int      @id @default(1)
+  clientId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Memory {
+  id         String   @id @default(cuid())
+  userId     String
+  // "user" = long-term personal memory, "knowledge" = uploaded documents/KB.
+  kind       String   @default("user")
+  // Memory type taxonomy (identity, preference, travel, food, ...). See MemoryType.
+  type       String   @default("knowledge")
+  // One of: active | archived. Archived memories are excluded from retrieval.
+  status     String   @default("active")
+  text       String
+  embedding  String   // JSON-encoded vector
+  // Confidence (0..1) raised by repeated confirmation, lowered by contradictions.
+  confidence Float    @default(0.5)
+  // Recency/importance signals used by the Memory Service for ranking.
+  importance Float    @default(0.5)
+  // Number of times this memory has been retrieved/used.
+  accessCount Int      @default(0)
+  // Null = permanent. Otherwise the memory auto-expires (temporary memories).
+  expiresAt  DateTime?
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Graph linkage: a memory may be the source of structured entities/relations.
+  entities   MemoryEntity[]
+
+  @@index([userId, kind])
+  @@index([userId, type, status])
+}
+
+model MemoryEntity {
+  id       String   @id @default(cuid())
+  userId   String
+  // Canonical entity name, e.g. "Hyatt", "Seattle", "user" (the user themselves).
+  name     String
+  // Optional entity type for reasoning, e.g. "hotel", "city", "company", "cuisine".
+  kind     String   @default("entity")
+  createdAt DateTime @default(now())
+
+  relationsOut MemoryRelation[] @relation("outgoing")
+  relationsIn  MemoryRelation[] @relation("incoming")
+  memories     Memory[]
+
+  @@unique([userId, name])
+  @@index([userId, kind])
+}
+
+model MemoryRelation {
+  id         String   @id @default(cuid())
+  userId     String
+  // Subject and object refer to MemoryEntity rows.
+  subjectId  String
+  objectId   String
+  // The predicate, e.g. "prefers", "works_at", "travels_to", "likes", "no_longer_prefers".
+  relation   String
+  // Strength (0..1) — mirror of confidence; raised by strengthen, lowered by weaken.
+  strength   Float    @default(0.5)
+  // One of: active | archived. Replaced facts are archived, not deleted.
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  subject MemoryEntity @relation("outgoing", fields: [subjectId], references: [id], onDelete: Cascade)
+  object  MemoryEntity @relation("incoming", fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, relation])
+  @@index([subjectId])
+  @@index([objectId])
+}
