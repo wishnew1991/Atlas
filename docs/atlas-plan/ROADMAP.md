@@ -551,6 +551,74 @@ This roadmap outlines the implementation of the Atlas Execution Engine architect
 
 ---
 
+## Phase 10: Monetization (Post-Launch, Traction-Dependent)
+
+### Goal: Free-first growth, then subscription based on traction
+
+**Strategic direction (agreed):** Keep Atlas free initially. Gather real user traction and
+usage signals, then introduce a subscription model only once usage justifies it — driven by
+usage metrics, not by calendar date. Never pay model costs out of pocket for heavy free users.
+
+### Tasks
+
+#### 1. Usage Metering / Token Accounting (Foundation for everything below)
+**Status:** 🔴 Not Started
+**Priority:** P0 (build even while the app stays free)
+**Risk:** Low
+**Dependencies:** Existing `TurnTrace` token accounting
+
+**Subtasks:**
+- [ ] Surface per-user token usage from existing `TurnTrace` (tokensIn/tokensOut)
+- [ ] Add account-level usage ledger (daily, weekly, monthly)
+- [ ] Implement free-tier credit/token budget per account
+- [ ] Add usage cap enforcement so heavy free users cannot overrun model cost
+- [ ] Expose usage data via an admin/metrics endpoint
+
+**Acceptance Criteria:**
+- Every account has a tracked usage ledger
+- Free usage is metered so per-account model cost is always known and capped
+- The subscription tier can be toggled on later without a rebuild (metering already in place)
+
+#### 2. Subscription / Paid Plan Gate (Future)
+**Status:** 🔴 Not Started (only once traction justifies)
+**Priority:** P2
+**Dependencies:** Usage Metering
+
+**Subtasks:**
+- [ ] Define Pro tier: model cost bundled into monthly fee
+- [ ] Integration with a payment provider (Stripe)
+- [ ] Free tier = small token/credit budget; Pro = unlimited/advanced plan
+- [ ] "Bring your own key" option so users can supply their own model credentials
+- [ ] Enterprise/team offering (sell the AI + MCP gateway layer per-seat)
+
+**Acceptance Criteria:**
+- Free tier is genuinely valuable but cost-capped
+- Pro subscription covers per-request LLM cost
+- Activation is a config toggle driven by a traction metric, not a fixed date
+
+#### 3. Transaction / Commission Revenue (Future)
+**Status:** 🔴 Not Started (requires real merchant gateway + payments)
+**Priority:** P1
+**Dependencies:** real MCP gateway + merchant approval integration
+
+**Subtasks:**
+- [ ] Drive real orders/books through MCP gateway (food, rides, travel, shopping)
+- [ ] Collect partnership/affiliate commission on completed orders
+- [ ] Charge per-transaction convenience/service fee
+- [ ] Track completed-order volume as the key monetization signal
+
+**Acceptance Criteria:**
+- Revenue is earned on real completed transactions
+- Affiliate/fee revenue is tracked separately from subscription revenue
+- Order-completion volume is used as a primary traction metric
+
+### Monetization Guardrails
+- **Free traction must not run un-metered LLM spend** — cap free-tier tokens/credits from day one.
+- **Don't cripple the free tier** — keep it valuable so users build an intent to pay.
+- **Use traction metrics (repeat usage, completed orders, weekly active) to decide when to charge** — not a calendar date.
+
+---
+
 ## Summary
 
 ### Total Duration: 32 weeks
@@ -559,6 +627,7 @@ This roadmap outlines the implementation of the Atlas Execution Engine architect
 - **P0 (Critical):** Phases 0, 1, 2, 8 (12 weeks)
 - **P1 (High):** Phases 3, 4, 5, 6, 7 (14 weeks)  
 - **P2 (Medium):** Phase 9 (6 weeks)
+- **Post-Launch:** Phase 10 (Monetization) — traction-dependent
 
 ### Risk Assessment:
 - **High Risk:** Database Migration, Execution Model, Planner Enhancement, Security Foundation
