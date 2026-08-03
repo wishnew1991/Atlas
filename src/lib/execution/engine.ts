@@ -44,7 +44,18 @@ const DOMAIN_KEYWORDS: { domain: string; pattern: RegExp }[] = [
   { domain: "shopping", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|amazon|flipkart|order\s+(a|the|some))\b/i },
 ];
 
-function inferDomain(text: string): string {
+function inferDomain(text: string, history?: AtlasChatHistoryItem[]): string {
+  // Check recent conversation history first — a "yes" after a food conversation
+  // should stay on the food domain, not fall back to "general".
+  if (history && history.length > 0) {
+    const recent = history.slice(-6);
+    for (const item of recent) {
+      for (const { domain, pattern } of DOMAIN_KEYWORDS) {
+        if (pattern.test(item.text)) return domain;
+      }
+    }
+  }
+  // Fall back to keyword inference on the current message.
   for (const { domain, pattern } of DOMAIN_KEYWORDS) {
     if (pattern.test(text)) return domain;
   }
@@ -70,7 +81,7 @@ async function liveGenerateReply(
   capabilities: AtlasCapabilities,
   options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse> {
-  const domain = inferDomain(message);
+  const domain = inferDomain(message, history);
   const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live pipeline.");
@@ -150,7 +161,7 @@ async function* liveStreamGenerateReply(
   signal?: AbortSignal,
   options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  const domain = inferDomain(message);
+  const domain = inferDomain(message, history);
   const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live streaming pipeline.");
@@ -240,7 +251,7 @@ export async function runChatExecution(
   let response: AtlasChatResponse;
 
   try {
-    const nonStreamDomain = inferDomain(message);
+    const nonStreamDomain = inferDomain(message, history);
     const hasModel = await resolveActiveModel(nonStreamDomain).catch(() => null);
     if (hasModel) {
       response = await liveGenerateReply(message, history, userId, capabilities, options);
@@ -313,7 +324,7 @@ export async function* streamChatExecution(
   let pendingAction: AtlasPendingAction | undefined;
 
   try {
-    const streamDomain = inferDomain(message);
+    const streamDomain = inferDomain(message, history);
     const hasModel = await resolveActiveModel(streamDomain).catch(() => null);
     const execId = execution.id;
 
