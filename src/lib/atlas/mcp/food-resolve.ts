@@ -65,7 +65,7 @@ export function resolveReference<T extends Indexed>(reference: string, options: 
   const byId = options.find((option) => option.id === raw);
   if (byId) return byId;
 
-  const explicit = lower.match(/(?:^|\b)(?:#|no\.?\s*|number\s*|option\s*|item\s*)(\d{1,2})\b/);
+  const explicit = lower.match(/(?:^|\b)(?:#|no\.?\s*|number\s*|option\s*|item\s*)(\d{1,3})\b/);
   if (explicit) {
     const found = options.find((option) => option.index === Number.parseInt(explicit[1], 10));
     if (found) return found;
@@ -77,8 +77,8 @@ export function resolveReference<T extends Indexed>(reference: string, options: 
     if (found) return found;
   }
 
-  // A message that is *only* a number is a selection.
-  const bare = lower.match(/^\s*(\d{1,2})\s*$/);
+  // A message that is *only* a number is a selection (menu indices can be 10+).
+  const bare = lower.match(/^\s*(\d{1,3})\s*$/);
   if (bare) {
     const found = options.find((option) => option.index === Number.parseInt(bare[1], 10));
     if (found) return found;
@@ -107,6 +107,7 @@ export function rankByName<T extends Indexed>(reference: string, options: T[], m
 
 export type CartIntent =
   | { kind: "add"; reference: string; quantity: number }
+  | { kind: "add_many"; references: string[]; quantity: number }
   | { kind: "remove"; reference: string }
   | { kind: "set_quantity"; reference: string; quantity: number }
   | { kind: "replace"; from: string; to: string }
@@ -133,6 +134,105 @@ const NOISE = /\b(please|pls|can you|could you|i(?:'| a)?d like|i want|i'll have
 
 function cleanReference(text: string): string {
   return text.replace(NOISE, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Detect menu-index selections like "24", "24 and 22", "add 22, 24".
+ * Must not match quantity+name phrases like "2 gulab jamuns".
+ */
+function parseMenuIndexSelection(text: string): CartIntent | null {
+  const stripped = text
+    .toLowerCase()
+    .replace(/\b(please|pls|add|also|items?|numbers?|options?|dishes?|from the menu|to (?:my |the )?cart)\b/gi, " ")
+    .replace(/[#&,]/g, " ")
+    .replace(/\band\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!stripped) return null;
+
+  const tokens = stripped.split(" ").filter(Boolean);
+  if (tokens.length === 0 || !tokens.every((token) => /^\d{1,3}$/.test(token))) {
+    return null;
+  }
+
+  // De-dupe while preserving order.
+  const refs: string[] = [];
+  for (const token of tokens) {
+    if (!refs.includes(token)) refs.push(token);
+  }
+
+  if (refs.length === 1) {
+    return { kind: "add", reference: refs[0], quantity: 1 };
+  }
+
+  return { kind: "add_many", references: refs, quantity: 1 };
+}
+
+/** True when the user is naming menu row numbers (e.g. "24 and 22"). */
+export function isMenuIndexSelection(message: string): boolean {
+  return parseMenuIndexSelection(message) !== null;
+}
+
+/**
+ * Pull a dish/cuisine keyword from a short food request ("pizza", "I want biryani").
+ * Returns null for vague hunger with no dish named.
+ */
+export function extractDishQuery(message: string): string | null {
+  const lower = message.trim().toLowerCase();
+  if (!lower) return null;
+
+  const explicit = lower.match(
+    /\b(?:want|craving|order|get|find|looking for|in the mood for|feel like)\s+(?:some\s+|a\s+|an\s+)?([a-z][a-z\s-]{1,40}?)(?:\s+please|\s+for\s+me|[?.!]|$)/i
+  );
+  if (explicit?.[1]) {
+    const dish = explicit[1].replace(/\b(food|something|anything|to eat|delivery)\b/gi, " ").replace(/\s+/g, " ").trim();
+    if (dish.length >= 3) return dish;
+  }
+
+  // Bare cuisine / dish one-liners (tolerate speech typos like "[izza").
+  const normalized = lower.replace(/^\[/, "p").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (/^(pizza|burger|biryani|sushi|noodles|pasta|chinese|indian|thai|mexican|dessert|breakfast|lunch|dinner|sandwich|salad|coffee|chaat|dosa|idli|paratha|shawarma|kebab|fried chicken|momos?)$/i.test(normalized)) {
+    return normalized;
+  }
+
+  if (/pizza/.test(normalized)) return "pizza";
+  if (/biryani/.test(normalized)) return "biryani";
+  if (/burger/.test(normalized)) return "burger";
+
+  return null;
+}
+
+/** User wants to start / continue ordering food and needs the address list shown. */
+export function needsAddressList(message: string, hasAddress: boolean): boolean {
+  if (hasAddress) return false;
+  const lower = message.trim().toLowerCase();
+  if (!lower) return false;
+  if (extractDishQuery(message)) return true;
+  return (
+    /\b(hungry|starving|food|eat|dinner|lunch|breakfast|order|delivery|swiggy)\b/.test(lower) ||
+    /\bwhat (?:should|can) i (?:eat|have|order)\b/.test(lower) ||
+    /\b(address|deliver(?:y| to)?)\b/.test(lower)
+  );
+}
+
+/**
+ * User wants to keep ordering — show the restaurant menu again (not invent a shortlist).
+ * "show more" alone usually means next menu page; that is handled separately.
+ */
+export function wantsMenuAgain(message: string): boolean {
+  const lower = message.trim().toLowerCase();
+  if (!lower) return false;
+
+  return (
+    /\badd more\b/.test(lower) ||
+    /\bmore (?:items|dishes|food|options)\b/.test(lower) ||
+    /\b(?:show|see|browse|open)(?:\s+me)?(?:\s+the)?\s+menu(?:\s+again)?\b/.test(lower) ||
+    /\bwhat else (?:can|do|should) (?:i|we) (?:get|add|order|have)\b/.test(lower) ||
+    /\bsomething else\b/.test(lower) ||
+    /\banything else to (?:add|order|get)\b/.test(lower) ||
+    /^(?:more|menu)$/i.test(lower)
+  );
 }
 
 /**
@@ -179,6 +279,11 @@ export function parseCartIntent(message: string): CartIntent {
   if (setQty) {
     return { kind: "set_quantity", reference: "", quantity: parseQuantity(setQty[1]) ?? 1 };
   }
+
+  // Menu numbers must be handled before stripQuantity — otherwise "24 and 22"
+  // collapses to unknown and the UI loops on "What would you like to add?"
+  const indexSelection = parseMenuIndexSelection(text);
+  if (indexSelection) return indexSelection;
 
   if (/\b(increase|one more|another|add another|double)\b/.test(lower)) {
     const quantity = parseQuantity(lower) ?? 1;

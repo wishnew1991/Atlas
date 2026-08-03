@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { finalizeFoodUpi } from "@/lib/atlas/server/atlas-agent";
-import { AtlasAuthenticationError, requireAuthenticatedActor } from "@/lib/atlas/server/auth";
+import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const actor = await requireAuthenticatedActor();
+    const actor = await getAtlasActor();
     const result = await finalizeFoodUpi(actionId, actor.userId);
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

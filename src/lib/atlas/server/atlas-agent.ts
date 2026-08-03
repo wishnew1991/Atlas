@@ -8,7 +8,7 @@ import type {
 } from "@/lib/atlas/agent-contract";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { routeToolCall } from "@/lib/atlas/mcp/router";
-import { readFoodOrderIntent } from "@/lib/atlas/mcp/food-approval";
+import { readFoodOrderIntent, type FoodOrderIntent } from "@/lib/atlas/mcp/food-approval";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import {
   createAtlasReplyCore,
@@ -16,6 +16,7 @@ import {
   looksLikeToolPayload,
   type AtlasStreamChunk,
 } from "@/lib/atlas/server/agent/reply";
+import { emitCommittedDomainEffect } from "@/lib/atlas/effects";
 
 export { looksLikeToolPayload };
 export type { AtlasStreamChunk };
@@ -139,10 +140,13 @@ export async function executeAtlasAction(actionId: string, userId: string) {
       foodLog("order.place", { approval: actionId, result: "ok", orderId: placed.orderId });
       await resumeLinkedExecution();
 
+      const suggestion = await emitCommittedDomainEffect("food", intent, userId);
+
       return {
         message: placed.message || `Your order from ${intent.restaurantName ?? "the restaurant"} is placed.`,
         reference: placed.orderId ?? pending.id,
         mode: "live" as const,
+        ...(suggestion ? { routineSuggestion: suggestion } : {}),
       };
     }
   }

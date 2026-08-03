@@ -2,46 +2,91 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  parseVoiceSttMode,
+  parseVoiceTtsMode,
+  sttEngineOrder,
+  ttsEngineOrder,
+  type VoiceEngine,
+  type VoiceSttMode,
+  type VoiceTtsMode,
+} from "@/lib/atlas/voice-modes";
+import {
+  createNativeRecognition,
+  extractTranscript,
+  isNativeSttAvailable,
+  isNativeTtsAvailable,
+  type NativeSpeechRecognition,
+} from "@/lib/atlas/voice-native";
+
 type VoiceConfig = {
   sttLanguage: string;
-  ttsVoiceURI: string;
   ttsRate: number;
   ttsPitch: number;
+  sttModelId: string;
+  ttsModelId: string;
+  sttMode: VoiceSttMode;
+  ttsMode: VoiceTtsMode;
 };
 
-// Voice now flows through the server-side NVIDIA NeMo omni model instead of
-// the browser's built-in speech APIs: the browser records audio and POSTs it
-// to /api/voice/stt, and plays back audio returned from /api/voice/tts. Secrets
-// (the NVIDIA key) stay server-side.
+type VoiceStatus = {
+  sttReady: boolean;
+  ttsReady: boolean;
+  sttModelLabel: string | null;
+};
 
+/**
+ * Voice adapter: Web Speech (device) + server STT/TTS.
+ * Modes are Admin-configurable; same hook surface for a future Capacitor shell.
+ */
 export function useVoice() {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
+  const [listeningEngine, setListeningEngine] = useState<VoiceEngine | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<VoiceConfig>({
     sttLanguage: "en-US",
-    ttsVoiceURI: "",
     ttsRate: 1,
     ttsPitch: 1,
+    sttModelId: "",
+    ttsModelId: "local:piper",
+    sttMode: "native_first",
+    ttsMode: "server_first",
+  });
+  const [status, setStatus] = useState<VoiceStatus>({
+    sttReady: false,
+    ttsReady: false,
+    sttModelLabel: null,
   });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<NativeSpeechRecognition | null>(null);
+  const sttEngineRef = useRef<VoiceEngine | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const onTranscriptRef = useRef<((text: string) => void) | null>(null);
   const audioUnlockedRef = useRef(false);
   const pendingAudioUrlRef = useRef<string | null>(null);
   const playAudioUrlRef = useRef<((url: string) => void) | null>(null);
+  const intentionalStopRef = useRef(false);
+  const configRef = useRef(config);
+  const statusRef = useRef(status);
 
   useEffect(() => {
-    const hasMedia = typeof navigator !== "undefined" && "mediaDevices" in navigator && "MediaRecorder" in window;
-    setSupported(hasMedia);
+    configRef.current = config;
+  }, [config]);
 
-    // A single persistent audio element is reused for every TTS reply. Browsers
-    // (especially iOS Safari) only allow play() after the element has been
-    // "unlocked" by a play() call inside a user gesture. We create it lazily and
-    // unlock it synchronously on the first tap, so later async play() calls work.
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    const hasMedia =
+      typeof navigator !== "undefined" && "mediaDevices" in navigator && "MediaRecorder" in window;
+    const hasNative = isNativeSttAvailable() || isNativeTtsAvailable();
+    setSupported(hasMedia || hasNative);
+
     const getAudio = (): HTMLAudioElement => {
       if (!audioElementRef.current) {
         const audio = new Audio();
@@ -56,7 +101,6 @@ export function useVoice() {
       audioUnlockedRef.current = true;
 
       try {
-        // Play a tiny silent WAV inside the gesture to unlock the element.
         const audio = getAudio();
         audio.src =
           "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
@@ -68,7 +112,6 @@ export function useVoice() {
         /* audio unlock is best-effort */
       }
 
-      // If a Piper reply was blocked waiting for activation, play it now.
       if (pendingAudioUrlRef.current) {
         const url = pendingAudioUrlRef.current;
         pendingAudioUrlRef.current = null;
@@ -108,6 +151,11 @@ export function useVoice() {
       document.removeEventListener("keydown", unlock);
       document.removeEventListener("touchstart", unlock);
       mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* ignore */
+      }
     };
   }, []);
 
@@ -116,8 +164,24 @@ export function useVoice() {
     fetch("/api/voice-config")
       .then((response) => response.json())
       .then((payload) => {
-        if (active && payload?.voice) {
-          setConfig(payload.voice);
+        if (!active) return;
+        if (payload?.voice) {
+          setConfig({
+            sttLanguage: payload.voice.sttLanguage ?? "en-US",
+            ttsRate: payload.voice.ttsRate ?? 1,
+            ttsPitch: payload.voice.ttsPitch ?? 1,
+            sttModelId: payload.voice.sttModelId ?? "",
+            ttsModelId: payload.voice.ttsModelId ?? "local:piper",
+            sttMode: parseVoiceSttMode(payload.voice.sttMode),
+            ttsMode: parseVoiceTtsMode(payload.voice.ttsMode),
+          });
+        }
+        if (payload?.status) {
+          setStatus({
+            sttReady: payload.status.sttReady === true,
+            ttsReady: payload.status.ttsReady === true,
+            sttModelLabel: payload.status.sttModelLabel ?? null,
+          });
         }
       })
       .catch(() => {});
@@ -126,143 +190,262 @@ export function useVoice() {
     };
   }, []);
 
-  const startListening = useCallback(
-    async (onTranscript: (text: string) => void) => {
-      if (!supported || listening) return;
-      setError(null);
+  const startServerListening = useCallback(async (onTranscript: (text: string) => void) => {
+    if (!statusRef.current.sttReady) {
+      throw new Error(
+        "No STT model is ready. Open Admin → Voice and select a speech-to-text model (Whisper or NVIDIA omni)."
+      );
+    }
 
-      let stream: MediaStream | undefined;
+    if (typeof navigator === "undefined" || !("mediaDevices" in navigator) || !("MediaRecorder" in window)) {
+      throw new Error("This browser cannot record microphone audio for server STT.");
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    audioChunksRef.current = [];
+    onTranscriptRef.current = onTranscript;
+    sttEngineRef.current = "server";
+    setListeningEngine("server");
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const blob = new Blob(audioChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      setListening(false);
+      setListeningEngine(null);
+      sttEngineRef.current = null;
+
+      if (blob.size === 0) {
+        setError("No audio was captured. Check your microphone and try again.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        audioChunksRef.current = [];
-        onTranscriptRef.current = onTranscript;
+        const response = await fetch("/api/voice/stt", { method: "POST", body: formData });
+        const payload: unknown = await response.json();
+        if (!response.ok || typeof payload !== "object" || payload === null) {
+          const message = (payload as { error?: string })?.error;
+          setError(
+            message ||
+              "Voice transcription failed. Configure STT under Admin → Voice and check Providers."
+          );
+          return;
+        }
+        const text = (payload as { text?: string }).text;
+        const callback = onTranscriptRef.current;
+        if (text && callback) {
+          callback(text);
+        }
+      } catch {
+        setError("Voice transcription failed. Check Admin → Voice STT model.");
+      }
+    };
 
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setListening(true);
+  }, []);
 
-        recorder.onstop = async () => {
-          stream?.getTracks().forEach((track) => track.stop());
-          const blob = new Blob(audioChunksRef.current, {
-            type: recorder.mimeType || "audio/webm",
-          });
-          setListening(false);
+  const startNativeListening = useCallback((onTranscript: (text: string) => void) => {
+    const recognition = createNativeRecognition(configRef.current.sttLanguage);
+    if (!recognition) {
+      throw new Error("Device speech recognition is not available in this browser.");
+    }
 
-          if (blob.size === 0) {
-            setError("No audio was captured. Check your microphone and try again.");
+    intentionalStopRef.current = false;
+    onTranscriptRef.current = onTranscript;
+    recognitionRef.current = recognition;
+    sttEngineRef.current = "native";
+    setListeningEngine("native");
+
+    recognition.onresult = (event) => {
+      const text = extractTranscript(event);
+      if (text) {
+        onTranscriptRef.current?.(text);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      // "aborted" / "no-speech" are common; only surface hard failures.
+      if (event.error === "not-allowed") {
+        setError("Microphone permission was denied. Allow microphone access and try again.");
+      } else if (event.error === "audio-capture") {
+        setError("No microphone was found on this device.");
+      } else if (event.error !== "aborted" && event.error !== "no-speech") {
+        setError(`Device speech recognition failed (${event.error}).`);
+      }
+    };
+
+    recognition.onend = () => {
+      // Some browsers end after a pause; keep listening until the user stops.
+      if (!intentionalStopRef.current && recognitionRef.current === recognition) {
+        try {
+          recognition.start();
+          return;
+        } catch {
+          /* fall through to idle */
+        }
+      }
+      setListening(false);
+      setListeningEngine(null);
+      sttEngineRef.current = null;
+      recognitionRef.current = null;
+    };
+
+    recognition.start();
+    setListening(true);
+  }, []);
+
+  const startListening = useCallback(
+    async (onTranscript: (text: string) => void) => {
+      if (listening) return;
+      setError(null);
+
+      const order = sttEngineOrder(configRef.current.sttMode);
+      const errors: string[] = [];
+
+      for (const engine of order) {
+        try {
+          if (engine === "native") {
+            if (!isNativeSttAvailable()) {
+              errors.push("Device STT unavailable");
+              continue;
+            }
+            startNativeListening(onTranscript);
             return;
           }
 
-          const formData = new FormData();
-          formData.append("audio", blob, "recording.webm");
-
-          try {
-            const response = await fetch("/api/voice/stt", { method: "POST", body: formData });
-            const payload: unknown = await response.json();
-            if (!response.ok || typeof payload !== "object" || payload === null) {
-              const message = (payload as { error?: string })?.error;
-              setError(message || "Voice transcription failed. Make sure a speech model is configured (Admin → Providers).");
-              return;
-            }
-            const text = (payload as { text?: string }).text;
-            const callback = onTranscriptRef.current;
-            if (text && callback) {
-              callback(text);
-            }
-          } catch {
-            setError("Voice transcription failed. Check that a speech model is configured.");
-          }
-        };
-
-        mediaRecorderRef.current = recorder;
-        recorder.start();
-        setListening(true);
-      } catch (err) {
-        stream?.getTracks().forEach((track) => track.stop());
-        setListening(false);
-        const reason =
-          err instanceof DOMException
-            ? err.name === "NotAllowedError"
-              ? "Microphone permission was denied. Allow microphone access and try again."
-              : err.name === "NotFoundError"
-                ? "No microphone was found on this device."
-                : "Could not start the microphone."
-            : "Could not start the microphone.";
-        setError(reason);
+          await startServerListening(onTranscript);
+          return;
+        } catch (err) {
+          const message =
+            err instanceof DOMException
+              ? err.name === "NotAllowedError"
+                ? "Microphone permission was denied. Allow microphone access and try again."
+                : err.name === "NotFoundError"
+                  ? "No microphone was found on this device."
+                  : "Could not start the microphone."
+              : err instanceof Error
+                ? err.message
+                : "Could not start speech input.";
+          errors.push(message);
+        }
       }
+
+      setError(errors[errors.length - 1] || "Speech input is not available.");
     },
-    [supported, listening]
+    [listening, startNativeListening, startServerListening]
   );
 
   const stopListening = useCallback(() => {
+    intentionalStopRef.current = true;
+    const engine = sttEngineRef.current;
+
+    if (engine === "native" || recognitionRef.current) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        try {
+          recognitionRef.current?.abort();
+        } catch {
+          /* ignore */
+        }
+      }
+      recognitionRef.current = null;
+    }
+
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
+
+    if (engine === "native") {
+      setListening(false);
+      setListeningEngine(null);
+      sttEngineRef.current = null;
+    }
   }, []);
 
-  const speakBrowser = useCallback((text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const speakNative = useCallback((text: string) => {
+    if (!isNativeTtsAvailable()) {
+      throw new Error("Device text-to-speech is not available in this browser.");
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = config.ttsRate;
-    utterance.pitch = config.ttsPitch;
-    if (config.ttsVoiceURI && typeof window.speechSynthesis.getVoices === "function") {
-      const match = window.speechSynthesis.getVoices().find((voice) => voice.voiceURI === config.ttsVoiceURI);
-      if (match) utterance.voice = match;
-    }
+    utterance.rate = configRef.current.ttsRate;
+    utterance.pitch = configRef.current.ttsPitch;
     utterance.onstart = () => setSpeaking(true);
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(utterance);
-  }, [config.ttsRate, config.ttsPitch, config.ttsVoiceURI]);
+  }, []);
+
+  const speakServer = useCallback(async (text: string) => {
+    const response = await fetch("/api/voice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, rate: configRef.current.ttsRate }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Server TTS failed.");
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    if (!audioUnlockedRef.current) {
+      pendingAudioUrlRef.current = url;
+      return;
+    }
+
+    playAudioUrlRef.current?.(url);
+  }, []);
 
   const speak = useCallback(
     async (text: string) => {
       if (!text) return;
+      setError(null);
 
-      let response: Response;
-      try {
-        response = await fetch("/api/voice/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, rate: config.ttsRate }),
-        });
-      } catch {
-        speakBrowser(text);
-        return;
+      const order = ttsEngineOrder(configRef.current.ttsMode);
+      const errors: string[] = [];
+
+      for (const engine of order) {
+        try {
+          if (engine === "native") {
+            speakNative(text);
+            return;
+          }
+          await speakServer(text);
+          return;
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : "TTS failed");
+        }
       }
 
-      if (!response.ok) {
-        speakBrowser(text);
-        return;
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-
-      // Autoplay policy: if the page hasn't seen a user gesture yet, play() is
-      // rejected. Park the audio and play it on the next gesture instead of
-      // falling back to Chrome TTS.
-      if (!audioUnlockedRef.current) {
-        pendingAudioUrlRef.current = url;
-        return;
-      }
-
-      playAudioUrlRef.current?.(url);
+      setError(errors[errors.length - 1] || "Speech output is not available.");
     },
-    [speakBrowser, config.ttsRate]
+    [speakNative, speakServer]
   );
 
   const stopSpeaking = useCallback(() => {
-    // TTS uses the browser's speech synthesis (not an <audio> element), so we
-    // must cancel it there — pausing the audio element does nothing.
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
+    }
+    if (pendingAudioUrlRef.current) {
+      URL.revokeObjectURL(pendingAudioUrlRef.current);
+      pendingAudioUrlRef.current = null;
     }
     audioElementRef.current?.pause();
     setSpeaking(false);
@@ -271,6 +454,7 @@ export function useVoice() {
   return {
     supported,
     listening,
+    listeningEngine,
     speaking,
     error,
     clearError: () => setError(null),

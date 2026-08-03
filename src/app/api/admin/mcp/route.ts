@@ -12,6 +12,7 @@ import {
 } from "@/lib/atlas/server/model-registry";
 import { withMcpServer } from "@/lib/atlas/server/mcp-client";
 import { classifyMcpServer } from "@/lib/atlas/mcp/roles";
+import { invalidateToolCache, primeToolCache } from "@/lib/atlas/mcp/registry";
 import { prisma } from "@/lib/atlas/server/prisma";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
   };
 
   const saved = await upsertMcpServer(input);
+  invalidateToolCache(saved.id);
 
   try {
     const discovered = await withMcpServer(
@@ -132,6 +134,7 @@ export async function POST(request: Request) {
       },
       async (client) => client.listTools()
     );
+    primeToolCache(saved.id, discovered);
     await updateMcpServerHealth(saved.id, discovered.length, null);
 
     // Auto-classify the server from its discovered tools, unless the admin
@@ -162,6 +165,7 @@ export async function DELETE(request: Request) {
   }
 
   await deleteMcpServer(payload.id);
+  invalidateToolCache(payload.id);
 
   return NextResponse.json({ ok: true });
 }

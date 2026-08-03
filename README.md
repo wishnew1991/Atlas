@@ -1,5 +1,7 @@
 Atlas is a Next.js app that presents a Personal AI Assistant experience.
 
+**Start here: [ATLAS.md](ATLAS.md)** — the single source of truth for Atlas's product vision, philosophy, and the North Star: _the assistant that already knows_.
+
 ## Run Locally
 
 ```bash
@@ -9,7 +11,7 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the performance-core architecture (execution timeline, persistence, MCP caching, observability).
+For technical details (execution timeline, persistence, MCP caching, observability), see [docs/PERFORMANCE.md](docs/PERFORMANCE.md). For product vision and philosophy, see [ATLAS.md](ATLAS.md).
 
 ## Backend Configuration
 

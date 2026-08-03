@@ -20,7 +20,7 @@ function loadTsModule(relPath) {
   return import(file);
 }
 
-const { parseCartIntent, resolveReference } = await loadTsModule("src/lib/atlas/mcp/food-resolve.ts");
+const { parseCartIntent, resolveReference, wantsMenuAgain, extractDishQuery, needsAddressList } = await loadTsModule("src/lib/atlas/mcp/food-resolve.ts");
 
 let passed = 0;
 let failed = 0;
@@ -67,6 +67,53 @@ test("'add another biryani' increments", () => {
   const intent = parseCartIntent("add another biryani");
   assert.equal(intent.kind, "add");
   assert.match(intent.reference, /biryani/i);
+});
+test("bare menu index is an add", () => {
+  const intent = parseCartIntent("24");
+  assert.equal(intent.kind, "add");
+  assert.equal(intent.reference, "24");
+  assert.equal(intent.quantity, 1);
+});
+test("'24 and 22' adds both menu indices", () => {
+  const intent = parseCartIntent("24 and 22");
+  assert.equal(intent.kind, "add_many");
+  assert.deepEqual(intent.references, ["24", "22"]);
+});
+test("'add 24 and 22' adds both menu indices", () => {
+  const intent = parseCartIntent("add 24 and 22");
+  assert.equal(intent.kind, "add_many");
+  assert.deepEqual(intent.references, ["24", "22"]);
+});
+test("quantity + dish name is not treated as indices", () => {
+  const intent = parseCartIntent("add 2 gulab jamuns");
+  assert.equal(intent.kind, "add");
+  assert.equal(intent.quantity, 2);
+  assert.match(intent.reference, /gulab jamun/i);
+});
+
+section("Menu again intent");
+test("'add more' wants the menu again", () => {
+  assert.equal(wantsMenuAgain("add more"), true);
+});
+test("'show the menu' wants the menu again", () => {
+  assert.equal(wantsMenuAgain("show the menu"), true);
+});
+test("dish add is not menu-again", () => {
+  assert.equal(wantsMenuAgain("add chicken tikka"), false);
+});
+
+section("Address / dish start");
+test("extract pizza from bare message", () => {
+  assert.equal(extractDishQuery("pizza"), "pizza");
+});
+test("extract pizza from speech typo", () => {
+  assert.equal(extractDishQuery("[izza"), "pizza");
+});
+test("needs address list when hungry without address", () => {
+  assert.equal(needsAddressList("I'm hungry", false), true);
+});
+test("does not need address list when address set", () => {
+  assert.equal(needsAddressList("pizza", true), false);
 });
 
 section("Cart intent — remove");

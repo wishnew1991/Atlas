@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { executeAtlasAction } from "@/lib/atlas/server/atlas-agent";
-import { AtlasAuthenticationError, requireAuthenticatedActor } from "@/lib/atlas/server/auth";
+import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const actor = await requireAuthenticatedActor();
+    // Guests may approve guest-owned actions (userId null). Ownership is enforced
+    // inside executeAtlasAction — do not require Clerk here or Place order 401s
+    // after a successful guest checkout.
+    const actor = await getAtlasActor();
     const result = await executeAtlasAction(actionId, actor.userId);
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

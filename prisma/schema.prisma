@@ -16,7 +16,6 @@ model AtlasUser {
   conversations Conversation[]
 }
 
-
 /// Consumer profile: identity, addresses, payment methods, privacy toggles.
 model UserProfile {
   id            String   @id @default(cuid())
@@ -78,6 +77,14 @@ model VoiceConfig {
   ttsVoiceURI String   @default("")
   ttsRate     Float    @default(1)
   ttsPitch    Float    @default(1)
+  /// ModelConfig.id used for speech-to-text (Whisper / omni / etc.).
+  sttModelId  String   @default("")
+  /// Model id or virtual target for TTS (e.g. "local:piper").
+  ttsModelId  String   @default("local:piper")
+  /// native_first | server_first | native_only | server_only
+  sttMode     String   @default("native_first")
+  /// server_first | native_first | native_only | server_only
+  ttsMode     String   @default("server_first")
 }
 
 model Approval {
@@ -99,15 +106,15 @@ model Approval {
 }
 
 model Conversation {
-  id            String    @id @default(cuid())
-  userId        String?
-  user          AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  userId       String?
+  user         AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Rolling summary of older turns so the model keeps context without full history.
-  summary       String    @default("")
-  lastMessageAt DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  messages      Message[]
+  summary      String    @default("")
+  lastMessageAt DateTime @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  messages     Message[]
 
   @@index([userId, lastMessageAt])
 }
@@ -125,6 +132,19 @@ model Message {
   @@index([conversationId, createdAt])
 }
 
+/// Durable workflow state (food ordering sessions, tool run state, etc.).
+model WorkflowSession {
+  id        String   @id
+  kind      String
+  userId    String?
+  payload   String
+  expiresAt DateTime?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([kind, userId])
+  @@index([expiresAt])
+}
 
 /// Per-turn observability for latency, tokens, tools, and stage timing.
 model TurnTrace {
@@ -145,41 +165,6 @@ model TurnTrace {
 
   @@index([userId, createdAt])
   @@index([createdAt])
-}
-
-/// Durable execution unit of work (chat turns and workflows).
-model Execution {
-  id             String    @id @default(cuid())
-  /// Actor id (Clerk id or null for guest). No AtlasUser FK until identity stabilizes.
-  userId         String?
-  goal           String
-  type           String    @default("immediate")
-  status         String    @default("planning")
-  planJson       String    @default("{}")
-  stateJson      String    @default("{}")
-  resultsJson    String    @default("[]")
-  metadataJson   String    @default("{}")
-  conversationId String?
-  runId          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  completedAt    DateTime?
-  events         ExecutionEvent[]
-
-  @@index([userId, createdAt])
-  @@index([conversationId, createdAt])
-  @@index([status, updatedAt])
-}
-
-model ExecutionEvent {
-  id          String   @id @default(cuid())
-  executionId String
-  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  type        String
-  payload     String   @default("{}")
-  createdAt   DateTime @default(now())
-
-  @@index([executionId, createdAt])
 }
 
 model ActivityItem {
@@ -294,4 +279,93 @@ model MemoryRelation {
   @@index([userId, relation])
   @@index([subjectId])
   @@index([objectId])
+}
+
+/// A user routine Atlas can replay (e.g. "order my usual"). Domain-agnostic:
+/// the `domain` names the runner to invoke and `payloadJson` holds that
+/// domain's directives, so rides/groceries/hotels/appointments reuse the same
+/// store without per-domain tables.
+model Routine {
+  id          String   @id @default(cuid())
+  userId      String
+  /// Which runner owns this action (must have a registered runner in the
+  /// Routine registry — currently "food").
+  domain      String
+  /// Short label the user would say, e.g. "my usual", "regular ride".
+  label       String
+  /// Domain-specific spec handed to the runner at replay time.
+  payloadJson String   @default("{}")
+  status      String   @default("active")
+  /// Human-readable summary shown in Profile so a user can see / delete a routine.
+  summary     String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, domain, status])
+  @@unique([userId, domain, label])
+}
+
+/// A behavior Signature Atlas has observed to learn routines naturally.
+/// Silent tally until confidence crosses a threshold, then a gentle one-time ask.
+model RoutineObservation {
+  id          String   @id @default(cuid())
+  userId      String
+  domain      String
+  /// Stable fingerprint of the observed behavior (e.g. dish+restaurant), so
+  /// the same action tallies up rather than creating duplicates.
+  fingerprint String
+  /// Human-readable description, e.g. "chicken biryani from Meghana Foods".
+  summary     String   @default("")
+  /// Times this exact behavior has been observed.
+  count       Int      @default(0)
+  /// Confidence derived from repetition (0..1). Grows with count.
+  confidence  Float    @default(0)
+  /// observing | suggested | accepted | declined
+  state       String   @default("observing")
+  /// True once we've asked the user (so we don't nag).
+  askedEver   Boolean  @default(false)
+  /// True once the user declined (so we stop asking this signature).
+  declinedEver Boolean  @default(false)
+  /// Domain-specific payload to build a Routine if the user says yes.
+  payloadJson String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, domain, fingerprint])
+  @@index([userId, domain, state])
+}
+
+/// Durable execution that is the interface; this is the unit of work.
+model Execution {
+  id             String    @id @default(cuid())
+  /// Actor id (Clerk id or null for guest). No AtlasUser FK until identity stabilizes.
+  userId         String?
+  goal           String
+  type           String    @default("immediate")
+  status         String    @default("planning")
+  planJson       String    @default("{}")
+  stateJson      String    @default("{}")
+  resultsJson    String    @default("[]")
+  metadataJson   String    @default("{}")
+  conversationId String?
+  runId          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+  events         ExecutionEvent[]
+
+  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model ExecutionEvent {
+  id          String   @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  type        String
+  payload     String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([executionId, createdAt])
 }

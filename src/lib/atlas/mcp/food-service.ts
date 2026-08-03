@@ -23,7 +23,7 @@ import {
   SwiggyUnavailableError,
   type CartSnapshot,
 } from "@/lib/atlas/mcp/swiggy-client";
-import { parseCartIntent, rankByName, resolveReference } from "@/lib/atlas/mcp/food-resolve";
+import { parseCartIntent, rankByName, resolveReference, wantsMenuAgain } from "@/lib/atlas/mcp/food-resolve";
 import {
   formatAddressList,
   formatCartSummary,
@@ -83,8 +83,12 @@ export async function ensureAddress(userId: string, reference?: string): Promise
     );
     if (match) {
       const chosen = session.addressOptions.find((a) => a.id === match.id)!;
-      updateFoodSession(userId, { address: chosen, step: "browsing_restaurants" });
+      const next = updateFoodSession(userId, { address: chosen, step: "browsing_restaurants" });
       foodLog("address.select", { id: chosen.id, tag: chosen.tag });
+      // Continue into restaurant search when the user already named a dish.
+      if (next.lastDishQuery) {
+        return discoverRestaurants(userId, next.lastDishQuery);
+      }
       return ok(`Delivering to **${chosen.tag ?? chosen.line}**. What would you like to eat?`);
     }
   }
@@ -96,6 +100,9 @@ export async function ensureAddress(userId: string, reference?: string): Promise
     const label = session.address.tag ?? session.address.line;
     if (reference) {
       foodLog("recovery", { reason: "address_already_set_unrecognized_reference", reference });
+    }
+    if (session.lastDishQuery) {
+      return discoverRestaurants(userId, session.lastDishQuery);
     }
     return ok(`Delivering to **${label}**. What would you like to eat?`);
   }
@@ -118,15 +125,21 @@ export async function ensureAddress(userId: string, reference?: string): Promise
       );
       if (match) {
         const chosen = addresses.find((a) => a.id === match.id)!;
-        updateFoodSession(userId, { address: chosen, step: "browsing_restaurants" });
+        const selected = updateFoodSession(userId, { address: chosen, step: "browsing_restaurants" });
         foodLog("address.select", { id: chosen.id, tag: chosen.tag });
+        if (selected.lastDishQuery) {
+          return discoverRestaurants(userId, selected.lastDishQuery);
+        }
         return ok(`Delivering to **${chosen.tag ?? chosen.line}**. What would you like to eat?`);
       }
     }
 
     // Always present the full list so the user can (re)view and change the
     // delivery address — never silently collapse to a "using saved" notice.
-    return ok(formatAddressList(next));
+    const dishHint = next.lastDishQuery
+      ? `\n\nI'll search for **${next.lastDishQuery}** after you pick an address.`
+      : "";
+    return ok(`${formatAddressList(next)}${dishHint}`);
   } catch (error) {
     return unavailable(error, "Want me to try again?");
   }
@@ -139,6 +152,9 @@ export async function discoverRestaurants(userId: string, dish: string): Promise
   logSessionState(userId, session);
 
   if (!session.address) {
+    if (dish.trim()) {
+      updateFoodSession(userId, { lastDishQuery: dish.trim() });
+    }
     return ensureAddress(userId);
   }
 
@@ -345,6 +361,12 @@ export async function updateCart(userId: string, instruction: string): Promise<F
 
   if (!session.address) return ensureAddress(userId);
 
+  // "add more" / "show the menu" should reopen the menu, not invent a shortlist.
+  if (wantsMenuAgain(instruction)) {
+    foodLog("cart.change", { intent: "show_menu", instruction: instruction.slice(0, 80) });
+    return loadMenu(userId, 1);
+  }
+
   const intent = parseCartIntent(instruction);
   foodLog("cart.change", { intent: intent.kind, instruction: instruction.slice(0, 80) });
 
@@ -410,6 +432,19 @@ export async function updateCart(userId: string, instruction: string): Promise<F
       return removal;
     }
     return updateCart(userId, `add ${intent.to}`);
+  }
+
+  if (intent.kind === "add_many") {
+    const notes: string[] = [];
+    for (const reference of intent.references) {
+      const result = await updateCart(userId, `add ${reference}`);
+      if (result.reply) notes.push(result.reply);
+    }
+    if (notes.length === 0) {
+      return ok("What would you like to add?");
+    }
+    // Last note already includes the cart summary from the final successful add.
+    return ok(notes[notes.length - 1]);
   }
 
   // -------- add

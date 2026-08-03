@@ -24,8 +24,33 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-const CACHE_TTL_MS = 60_000;
+/** Tool schemas change rarely; invalidate explicitly on admin Discover/upsert. */
+const CACHE_TTL_MS = 10 * 60_000;
 const toolCache = new Map<string, CacheEntry>();
+
+/** Provider / server capability metadata cache (roles, tool counts). */
+interface CapabilityCacheEntry {
+  roles: string[];
+  toolRoles: Record<string, string[]>;
+  toolCount: number;
+  expiresAt: number;
+}
+
+const capabilityCache = new Map<string, CapabilityCacheEntry>();
+const CAPABILITY_TTL_MS = 10 * 60_000;
+
+export function getCachedCapabilities(serverId: string): CapabilityCacheEntry | null {
+  const cached = capabilityCache.get(serverId);
+  if (!cached || cached.expiresAt <= Date.now()) return null;
+  return cached;
+}
+
+export function setCachedCapabilities(
+  serverId: string,
+  value: Omit<CapabilityCacheEntry, "expiresAt">
+) {
+  capabilityCache.set(serverId, { ...value, expiresAt: Date.now() + CAPABILITY_TTL_MS });
+}
 
 export async function getEnabledServers(): Promise<AtlasMcpServer[]> {
   const servers = await listMcpServers();
@@ -90,7 +115,14 @@ export async function listServerTools(server: AtlasMcpServer): Promise<McpToolDe
 export function invalidateToolCache(serverId?: string) {
   if (serverId) {
     toolCache.delete(serverId);
+    capabilityCache.delete(serverId);
   } else {
     toolCache.clear();
+    capabilityCache.clear();
   }
+}
+
+/** Warm the tool schema cache after a successful discover. */
+export function primeToolCache(serverId: string, tools: McpToolDefinition[]) {
+  toolCache.set(serverId, { tools, expiresAt: Date.now() + CACHE_TTL_MS });
 }

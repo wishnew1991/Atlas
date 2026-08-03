@@ -1,5 +1,9 @@
 # Atlas performance core
 
+> **Note:** Product philosophy and principles (the North Star) now live in
+> [ATLAS.md](../ATLAS.md). This document covers technical architecture and
+> performance only.
+
 Architectural and performance changes shipped to make Atlas faster, more
 transparent, and restart-safe — without breaking existing `/api/chat`,
 `/api/actions/*`, or admin APIs.

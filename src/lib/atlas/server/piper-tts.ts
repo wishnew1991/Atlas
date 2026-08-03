@@ -74,17 +74,32 @@ export function synthesizeSpeech(
           args.push("--length-scale", String(options.lengthScale));
         }
 
-        const execOptions: ExecFileOptions = { maxBuffer: 25 * 1024 * 1024 };
-        const child = execFile(VENV_PYTHON, ["-m", "piper", ...args], execOptions, (error, stdout) => {
+        const execOptions = {
+          maxBuffer: 25 * 1024 * 1024,
+          // Critical: WAV is binary. Default utf8 decoding corrupts the stream
+          // and browsers refuse to play the result (Test TTS / chat speak fail).
+          encoding: "buffer" as const,
+        };
+        const child = execFile(
+          VENV_PYTHON,
+          ["-m", "piper", ...args],
+          execOptions as ExecFileOptions,
+          (error, stdout) => {
           if (error) {
             reject(new Error(`Piper TTS failed: ${error.message}`));
             return;
           }
-          resolve(Buffer.from(stdout));
-        });
+          const audio = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout);
+          if (audio.length < 44 || audio.subarray(0, 4).toString("ascii") !== "RIFF") {
+            reject(new Error("Piper returned invalid audio. Check the Piper install and voice model."));
+            return;
+          }
+          resolve(audio);
+        }
+        );
 
         // Feed the text to Piper via stdin and close it so synthesis starts.
-        child.stdin?.write(text);
+        child.stdin?.write(`${text.trim()}\n`);
         child.stdin?.end();
       })
       .catch(() => {

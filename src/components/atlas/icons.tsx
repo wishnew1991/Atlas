@@ -101,6 +101,33 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function StopIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function VolumeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 10v4h3.5L12 18V6L7.5 10H4Z" />
+      <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+      <path d="M17.5 7a6 6 0 0 1 0 10" />
+    </svg>
+  );
+}
+
+export function VolumeMuteIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 10v4h3.5L12 18V6L7.5 10H4Z" />
+      <path d="M16 9l5 5M21 9l-5 5" />
+    </svg>
+  );
+}
+
 export const TAB_ICONS: Record<string, (props: IconProps) => JSX.Element> = {
   home: HomeIcon,
   chat: ChatIcon,

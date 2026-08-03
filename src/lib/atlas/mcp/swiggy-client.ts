@@ -163,11 +163,51 @@ export async function fetchAddresses(): Promise<FoodAddress[]> {
 
 // -------------------------------------------------------------- restaurants
 
+function parseDistanceKm(entry: Record<string, unknown>): number | undefined {
+  const direct =
+    num(entry.distanceKm) ??
+    num(entry.distance_km) ??
+    num(entry.distance) ??
+    num(entry.lastMileTravel) ??
+    num(entry.last_mile_travel) ??
+    num(entry.slaDistance);
+
+  if (direct !== undefined) {
+    // Swiggy sometimes returns metres for lastMileTravel.
+    if (direct > 100) return Math.round((direct / 1000) * 10) / 10;
+    return Math.round(direct * 10) / 10;
+  }
+
+  const sla = isRecord(entry.sla) ? entry.sla : null;
+  if (sla) {
+    const fromSla =
+      num(sla.lastMileTravel) ??
+      num(sla.last_mile_travel) ??
+      num(sla.distance) ??
+      num(sla.distanceKm);
+    if (fromSla !== undefined) {
+      if (fromSla > 100) return Math.round((fromSla / 1000) * 10) / 10;
+      return Math.round(fromSla * 10) / 10;
+    }
+  }
+
+  const asText =
+    str(entry.distanceString) ?? str(entry.distanceText) ?? str(entry.lastMileTravelString);
+  if (asText) {
+    const km = asText.match(/([\d.]+)\s*km/i);
+    if (km) return Number.parseFloat(km[1]);
+    const metres = asText.match(/([\d.]+)\s*m\b/i);
+    if (metres) return Math.round((Number.parseFloat(metres[1]) / 1000) * 10) / 10;
+  }
+
+  return undefined;
+}
+
 export async function searchRestaurants(addressId: string, query: string, offset = 0): Promise<FoodRestaurant[]> {
   const { data } = await call("search_restaurants", { addressId, query, offset });
   const record = isRecord(data) ? data : {};
 
-  return arr(record.restaurants)
+  const restaurants = arr(record.restaurants)
     .filter(isRecord)
     .map((entry, i) => {
       const availability = str(entry.availabilityStatus) ?? "OPEN";
@@ -184,13 +224,20 @@ export async function searchRestaurants(addressId: string, query: string, offset
         etaText: str(entry.deliveryTimeRange),
         costForTwo: str(entry.costForTwo),
         areaName: str(entry.areaName),
-        distanceKm: num(entry.distanceKm),
+        distanceKm: parseDistanceKm(entry),
         isOpen,
         closedReason: isOpen ? undefined : availability,
         nextOpenTime: str(entry.nextOpenTime),
       };
     })
     .filter((entry) => entry.id.length > 0);
+
+  foodLog("restaurant.search.fields", {
+    count: restaurants.length,
+    withDistance: restaurants.filter((r) => r.distanceKm !== undefined).length,
+  });
+
+  return restaurants;
 }
 
 /**
@@ -562,7 +609,13 @@ export async function placeOrder(args: {
   const { body } = unwrap(data);
 
   const status = str(body.status) ?? str(body.orderStatus);
-  const upiLink = str(body.upiLink) ?? str(body.upiIntentUrl) ?? str(body.intentUrl) ?? str(body.paymentUrl);
+  const upiLinkFromBody =
+    str(body.upiLink) ?? str(body.upiIntentUrl) ?? str(body.intentUrl) ?? str(body.paymentUrl);
+  // Prefer https wrappers when the model embeds them in prose (desktop-friendly).
+  const httpsFromMessage = message.match(/https?:\/\/[^\s)"']+/i)?.[0];
+  const upiLink =
+    (httpsFromMessage && /deeplink|upi|pay/i.test(httpsFromMessage) ? httpsFromMessage : undefined) ||
+    upiLinkFromBody;
   const upiQr = str(body.upiQr) ?? str(body.qrData) ?? str(body.qrCode);
   const paymentRef = str(body.paymentRef) ?? str(body.transactionId) ?? str(body.paymentReference);
   const paasId = str(body.paasId) ?? str(body.paas_id);
@@ -608,14 +661,26 @@ export async function checkUpiPayment(args: {
   });
 
   const { body } = unwrap(data);
-  const status = str(body.status) ?? str(body.paymentStatus) ?? str(body.state);
+  const rawStatus = str(body.status) ?? str(body.paymentStatus) ?? str(body.state);
+  const status = rawStatus?.toUpperCase();
+  foodLog("upi.status", {
+    orderId: args.orderId,
+    paasId: args.paasId,
+    status: status ?? "unknown",
+    terminal: body.terminal === true || body.isTerminalFailure === true || body.isTerminalSuccess === true,
+    bodyKeys: Object.keys(body),
+    message: message.slice(0, 240),
+  });
   if (status) return status;
 
   // Some responses encode the outcome in prose; look for the canonical tokens.
   const text = `${message} ${JSON.stringify(body)}`;
   if (/\b(SUCCESS|PAID)\b/i.test(text)) return "SUCCESS";
-  if (/\b(FAILED)\b/i.test(text)) return "FAILED";
+  if (/\b(FAILED|CANCELLED|CANCELED|EXPIRED|DECLINED)\b/i.test(text)) return "FAILED";
   if (/\b(REFUND[- ]?INITIATED)\b/i.test(text)) return "REFUND-INITIATED";
+  // Structured failure flags from Swiggy Food MCP.
+  if (body.isTerminalFailure === true) return "FAILED";
+  if (body.isTerminalSuccess === true) return "SUCCESS";
   return "PENDING";
 }
 

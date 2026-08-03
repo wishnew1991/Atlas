@@ -10,6 +10,7 @@
     "seed:search": "node scripts/seed-search-mcp.mjs",
     "test:pipeline": "node scripts/test-pipeline.mjs",
     "test:food": "node scripts/test-food-nlu.mjs",
+    "test:routines": "node scripts/test-routines.mjs",
     "trace:pipeline": "node scripts/trace-pipeline.mjs",
     "trace:food": "node scripts/trace-food.mjs"
   },
@@ -17,12 +18,17 @@
     "@clerk/nextjs": "^6.39.6",
     "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@types/pg": "^8.20.3",
     "better-sqlite3": "^13.0.2",
+    "bullmq": "^6.0.5",
+    "ioredis": "^6.0.0",
     "next": "^15.5.22",
+    "pg": "^8.22.0",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

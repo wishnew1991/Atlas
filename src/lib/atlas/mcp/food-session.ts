@@ -1,16 +1,13 @@
 import "server-only";
 
+import { prisma } from "@/lib/atlas/server/prisma";
+import { logStructured } from "@/lib/atlas/observability/trace";
+
 // FoodSession — the conversational state for a single food ordering journey.
 //
-// This is deliberately a *temporary* store, independent of the Memory Service
-// and Knowledge Graph. Nothing here is a long-term fact about the user; it is
-// the working set for one ordering conversation (which address they picked,
-// which restaurant they are browsing, what the live cart looks like).
-//
-// The LLM orchestrates the flow by calling granular food tools. It never sees
-// or handles raw Swiggy identifiers — those live here, keyed by userId, and are
-// resolved server-side from the natural-language references the user gives
-// ("the second one", "Meghana", "make it two").
+// Working set for one ordering conversation. Backed by an in-memory L1 cache
+// with durable WorkflowSession persistence so orders survive restarts and
+// multi-instance deploys after hydrateFoodSession() runs at turn start.
 
 export type FoodStep =
   | "idle"
@@ -132,19 +129,99 @@ function emptySession(): FoodSession {
   };
 }
 
-// Sessions expire so a stale address/restaurant from hours ago never leaks into
-// a brand-new ordering conversation.
 const SESSION_TTL_MS = 60 * 60 * 1000;
+const KIND = "food";
 
 const sessions = new Map<string, FoodSession>();
+
+function sessionKey(userId: string): string {
+  return `food:${userId}`;
+}
+
+function isExpired(session: FoodSession): boolean {
+  return Date.now() - session.updatedAt > SESSION_TTL_MS;
+}
+
+function persistAsync(userId: string, session: FoodSession) {
+  const id = sessionKey(userId);
+  void prisma.workflowSession
+    .upsert({
+      where: { id },
+      create: {
+        id,
+        kind: KIND,
+        userId: userId === "atlas-demo-user" ? null : userId,
+        payload: JSON.stringify(session),
+        expiresAt: new Date(session.updatedAt + SESSION_TTL_MS),
+      },
+      update: {
+        payload: JSON.stringify(session),
+        expiresAt: new Date(session.updatedAt + SESSION_TTL_MS),
+        userId: userId === "atlas-demo-user" ? null : userId,
+      },
+    })
+    .catch((error) => {
+      logStructured("food_session.persist_failed", {
+        userId,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    });
+}
+
+function deletePersistedAsync(userId: string) {
+  void prisma.workflowSession.delete({ where: { id: sessionKey(userId) } }).catch(() => {});
+}
+
+/** Load durable session into L1 cache at the start of a turn. */
+export async function hydrateFoodSession(userId: string): Promise<FoodSession> {
+  const existing = sessions.get(userId);
+  if (existing && !isExpired(existing)) {
+    return existing;
+  }
+
+  try {
+    const row = await prisma.workflowSession.findUnique({ where: { id: sessionKey(userId) } });
+    if (!row) {
+      sessions.delete(userId);
+      return emptySession();
+    }
+
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
+      await prisma.workflowSession.delete({ where: { id: row.id } }).catch(() => {});
+      sessions.delete(userId);
+      return emptySession();
+    }
+
+    const parsed = JSON.parse(row.payload) as FoodSession;
+    if (!parsed || typeof parsed !== "object") {
+      return emptySession();
+    }
+
+    if (isExpired(parsed)) {
+      deletePersistedAsync(userId);
+      sessions.delete(userId);
+      return emptySession();
+    }
+
+    sessions.set(userId, parsed);
+    return parsed;
+  } catch (error) {
+    logStructured("food_session.hydrate_failed", {
+      userId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return existing && !isExpired(existing) ? existing : emptySession();
+  }
+}
 
 export function getFoodSession(userId: string): FoodSession {
   const existing = sessions.get(userId);
 
   if (!existing) return emptySession();
 
-  if (Date.now() - existing.updatedAt > SESSION_TTL_MS) {
+  if (isExpired(existing)) {
     sessions.delete(userId);
+    deletePersistedAsync(userId);
     return emptySession();
   }
 
@@ -154,11 +231,13 @@ export function getFoodSession(userId: string): FoodSession {
 export function updateFoodSession(userId: string, patch: Partial<FoodSession>): FoodSession {
   const next: FoodSession = { ...getFoodSession(userId), ...patch, updatedAt: Date.now() };
   sessions.set(userId, next);
+  persistAsync(userId, next);
   return next;
 }
 
 export function clearFoodSession(userId: string): void {
   sessions.delete(userId);
+  deletePersistedAsync(userId);
 }
 
 /**
@@ -172,6 +251,7 @@ export function resetOrderKeepAddress(userId: string): FoodSession {
   fresh.addressOptions = current.addressOptions;
   fresh.step = current.address ? "browsing_restaurants" : "awaiting_address";
   sessions.set(userId, fresh);
+  persistAsync(userId, fresh);
   return fresh;
 }
 

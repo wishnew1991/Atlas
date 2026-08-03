@@ -27,8 +27,7 @@ export function formatAddressList(session: FoodSession): string {
 }
 
 /**
- * Restaurant cards: name, rating, ETA, price, and availability — the fields the
- * brief calls for, in a single scannable line each.
+ * Restaurant cards: name, rating, ETA, distance, price — scannable one-liners.
  */
 export function formatRestaurantList(restaurants: FoodRestaurant[], dish: string): string {
   if (restaurants.length === 0) {
@@ -39,6 +38,15 @@ export function formatRestaurantList(restaurants: FoodRestaurant[], dish: string
     const bits: string[] = [];
     if (restaurant.rating !== undefined) bits.push(`⭐${restaurant.rating}`);
     if (restaurant.etaMinutes !== undefined) bits.push(`${restaurant.etaMinutes} min`);
+    if (restaurant.distanceKm !== undefined) {
+      const km =
+        restaurant.distanceKm >= 10
+          ? `${Math.round(restaurant.distanceKm)} km`
+          : `${restaurant.distanceKm} km`;
+      bits.push(km);
+    } else if (restaurant.areaName) {
+      bits.push(restaurant.areaName);
+    }
     if (restaurant.costForTwo) bits.push(restaurant.costForTwo.replace(/\s*for two$/i, " for two"));
 
     const cuisines = restaurant.cuisines.slice(0, 3).join(", ");

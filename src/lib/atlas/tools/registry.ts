@@ -18,6 +18,7 @@ import {
 } from "@/lib/atlas/mcp/food-service";
 import { getFoodSession } from "@/lib/atlas/mcp/food-session";
 import { foodLog } from "@/lib/atlas/mcp/food-log";
+import { routines } from "@/lib/atlas/routines";
 import { executeMcpTool, isMcpToolName, getDynamicMcpTools } from "@/lib/atlas/mcp/tools";
 import type { AtlasActionDomain, AtlasPendingAction, AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
 import type { Capability } from "@/lib/atlas/planner/planner";
@@ -344,7 +345,129 @@ const foodTools: AtlasTool[] = [
   foodCancelOrderTool,
 ];
 
-const tools: AtlasTool[] = [webSearchTool, atlasSearchTool, atlasPrepareApprovalTool, ...foodTools];
+// --------------------------------------------------------------------------
+// Routines — the "assistant that already knows" layer.
+//
+// A generic, domain-agnostic abstraction for user routines that Atlas learns
+// naturally (observe → suggest → accept) rather than being configured. The food
+// runner is the first specialization ("order my usual"). Future domains (rides,
+// groceries, hotels, appointments) register their own runner in routines/index.ts
+// and add a matching tool here — the store and dispatch stay the same.
+// --------------------------------------------------------------------------
+
+const foodSaveUsualTool: AtlasTool = {
+  name: "food_save_usual",
+  description:
+    "Explicitly remember the current food order (dish, restaurant, items) as the user's 'usual' so it can be replayed with a single request like 'order my usual'. Call when the user says 'remember this as my usual', 'make this my usual', or explicitly asks to save this order. Does not place or redo the order.",
+  parameters: {
+    type: "object",
+    properties: {},
+    required: [],
+  },
+  async execute(_args, ctx) {
+    const session = getFoodSession(ctx.userId);
+    const restaurant = session.restaurant;
+    const dish = session.lastDishQuery?.trim() || session.cart[0]?.name;
+
+    if (!restaurant || !dish) {
+      return {
+        message:
+          "I need an active food order to remember. Finish picking your order, then tell me to remember it as your routine.",
+        data: {},
+        usedGateway: false,
+      };
+    }
+
+    const payload = {
+      dish,
+      restaurant: restaurant.name,
+      items: session.cart.map((line) => ({ name: line.name, quantity: line.quantity })),
+    };
+
+    const saved = await routines.save(ctx.userId, {
+      domain: "food",
+      label: restaurant ? `usual ${dish} from ${restaurant.name}` : `usual ${dish}`,
+      payload,
+      summary: `${dish}${restaurant ? ` from ${restaurant.name}` : ""}`,
+    });
+    foodLog("routine.accept", { label: saved.label });
+    return {
+      message: `Got it — I'll remember **${saved.label}**. Just say "order my ${"usual"}" and I'll prepare it for you.`,
+      data: { label: saved.label },
+      usedGateway: false,
+    };
+  },
+};
+
+const foodOrderUsualTool: AtlasTool = {
+  name: "food_order_usual",
+  description:
+    "Replay the user's saved food routine: ask for their usual order with the words 'usual', 'the usual', 'my usual order', 'same as last time'. Prepares it and presents an approval card for confirmation — it never places the order without approval.",
+  parameters: {
+    type: "object",
+    properties: {
+      label: {
+        type: "string",
+        description:
+          "Optional label of the saved routine to replay (defaults to the user's saved usual food order).",
+      },
+    },
+    required: [],
+  },
+  async execute(args, ctx) {
+    const labelHint = stringArg(args.label, "usual");
+    const result = await routines.run(ctx.userId, "food", labelHint);
+    return {
+      message: result.message,
+      data: { domain: "food", awaitingUser: result.awaitingUser },
+      action: result.action,
+      usedGateway: true,
+      awaitingUser: result.awaitingUser,
+    };
+  },
+};
+
+/** Acknowledge a routine suggestion the silent learner surfaced ("yes" / "no"). */
+const routineDecisionTool: AtlasTool = {
+  name: "routine_decision",
+  description:
+    "Respond to an Atlas-proposed routine suggestion. Call when the user answers a question like 'would you like me to remember your usual order?' with yes (accept) or no (decline). Does not place any order.",
+  parameters: {
+    type: "object",
+    properties: {
+      accept: { type: "boolean", description: "True to remember, false to decline." },
+      observationId: {
+        type: "string",
+        description: "The observation id Atlas mentioned when proposing the routine.",
+      },
+    },
+    required: ["accept", "observationId"],
+  },
+  async execute(args, ctx) {
+    const observationId = stringArg(args.observationId);
+    const accept = args.accept === true;
+    if (!observationId) {
+      return { message: "I need the routine reference to act on it.", data: {}, usedGateway: false };
+    }
+    const { message, label } = await routines.decide(ctx.userId, observationId, accept);
+    foodLog(accept ? "routine.accept" : "routine.decline", { observationId });
+    return {
+      message,
+      data: accept ? { label, accepted: true } : { declined: true },
+      usedGateway: false,
+    };
+  },
+};
+
+const tools: AtlasTool[] = [
+  webSearchTool,
+  atlasSearchTool,
+  atlasPrepareApprovalTool,
+  ...foodTools,
+  foodSaveUsualTool,
+  foodOrderUsualTool,
+  routineDecisionTool,
+];
 
 export function getRegisteredTools(): AtlasTool[] {
   return tools;
@@ -357,7 +480,11 @@ export function getRegisteredTools(): AtlasTool[] {
  * the approval tool so the LLM can prepare user-confirmed actions.
  */
 const CAPABILITY_TOOLS: Record<Exclude<Capability, "none">, string[]> = {
-  food: foodTools.map((tool) => tool.name),
+  food: [
+    ...foodTools.map((tool) => tool.name),
+    foodSaveUsualTool.name,
+    foodOrderUsualTool.name,
+  ],
   travel: ["atlas_search", "atlas_prepare_approval"],
   shopping: ["atlas_search", "atlas_prepare_approval"],
   rides: ["atlas_search", "atlas_prepare_approval"],
@@ -414,7 +541,9 @@ export async function executeTool(
   if (isMcpToolName(name)) {
     try {
       const result = await executeMcpTool(name, args);
-      return { message: result.message, data: result.data, usedGateway: true };
+      const response: ToolExecResult = { message: result.message, data: result.data, usedGateway: true };
+      await emitToolEffect(name, ctx, args, response);
+      return response;
     } catch (error) {
       return {
         message: error instanceof Error ? error.message : "The connected MCP tool failed.",
@@ -430,5 +559,47 @@ export async function executeTool(
     return { message: "That tool is not available to Atlas.", data: {}, usedGateway: false };
   }
 
-  return tool.execute(args, ctx);
+  const result = await tool.execute(args, ctx);
+  await emitToolEffect(name, ctx, args, result);
+  return result;
+}
+
+/**
+ * Single automatic hook that feeds every successful tool execution into the
+ * learning pipeline — no per-tool code required. Once a domain has a routine
+ * runner, its repeated tool usages start forming routine candidates.
+ */
+async function emitToolEffect(
+  name: string,
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+  result: ToolExecResult
+): Promise<void> {
+  const { emitEffect } = await import("@/lib/atlas/effects");
+  await emitEffect(ctx.userId, {
+    tool: name,
+    domain: ctx.domain ?? "general",
+    committed: Boolean(result.action),
+    payload: { tool: name, ...sanitizeArgs(args) },
+    summary: result.action?.title ?? humanizeToolName(name),
+    entities: [],
+  });
+}
+
+function sanitizeArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "boolean") continue;
+    if (typeof value === "number" || typeof value === "string") clean[key] = value;
+  }
+  return clean;
+}
+
+function humanizeToolName(name: string): string {
+  return name
+    .replace(/^mcp__/, "")
+    .split(/[_\s.-]+/)
+    .filter(Boolean)
+    .join(" ");
 }

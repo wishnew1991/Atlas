@@ -1,5 +1,6 @@
 import "server-only";
 
+import { parseVoiceSttMode, parseVoiceTtsMode, type VoiceSttMode, type VoiceTtsMode } from "@/lib/atlas/voice-modes";
 import { prisma } from "./prisma";
 
 export type AtlasProvider = "openai" | "anthropic" | "google" | "nvidia" | "custom";
@@ -34,6 +35,14 @@ export interface AtlasVoiceConfig {
   ttsVoiceURI: string;
   ttsRate: number;
   ttsPitch: number;
+  /** ModelConfig.id for STT. Empty = auto-detect. */
+  sttModelId: string;
+  /** Model id or virtual TTS target (`local:piper`). */
+  ttsModelId: string;
+  /** Device vs server STT preference (Capacitor-ready). */
+  sttMode: VoiceSttMode;
+  /** Device vs server TTS preference (Capacitor-ready). */
+  ttsMode: VoiceTtsMode;
 }
 
 export interface AtlasModelRegistry {
@@ -97,6 +106,10 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
       ttsVoiceURI: voice?.ttsVoiceURI ?? "",
       ttsRate: voice?.ttsRate ?? 1,
       ttsPitch: voice?.ttsPitch ?? 1,
+      sttModelId: voice?.sttModelId ?? "",
+      ttsModelId: voice?.ttsModelId ?? "local:piper",
+      sttMode: parseVoiceSttMode(voice?.sttMode),
+      ttsMode: parseVoiceTtsMode(voice?.ttsMode),
     },
     domains: domains.map((domain) => domain.slug),
   };

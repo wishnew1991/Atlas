@@ -1,19 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 /**
- * Atlas is a mobile-only application. On a non-touch / wide (desktop) viewport
- * we show a simple notice instead of the app, since core flows (UPI app
- * redirection, native payment) only make sense on a phone.
+ * Atlas consumer app is mobile-first. On a non-touch / wide desktop viewport in
+ * production we show a simple notice, since core flows (UPI handoff, etc.) are
+ * phone-oriented. The admin control plane is exempt — operators use desktop.
  */
 export function MobileOnly({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<"loading" | "mobile" | "desktop">("loading");
+  const pathname = usePathname();
+  const isAdmin = pathname === "/admin" || Boolean(pathname?.startsWith("/admin/"));
+  const isAuth =
+    pathname === "/sign-in" ||
+    Boolean(pathname?.startsWith("/sign-in/")) ||
+    pathname === "/sign-up" ||
+    Boolean(pathname?.startsWith("/sign-up/"));
+  const [mode, setMode] = useState<"loading" | "mobile" | "desktop">(() =>
+    // Dev starts unlocked so laptop preview never flashes the loading gate.
+    process.env.NODE_ENV !== "production" ? "mobile" : "loading"
+  );
 
   useEffect(() => {
     const evaluate = () => {
-      // In development we allow desktop preview so the app can be tested on a
-      // laptop. Production enforces the mobile-only rule for real users.
       const isDev = process.env.NODE_ENV !== "production";
       const isTouch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
       const isNarrow = typeof window !== "undefined" && window.matchMedia("(max-width: 820px)").matches;
@@ -24,6 +33,18 @@ export function MobileOnly({ children }: { children: React.ReactNode }) {
     window.addEventListener("resize", evaluate);
     return () => window.removeEventListener("resize", evaluate);
   }, []);
+
+  if (isAdmin || isAuth) {
+    return (
+      <div
+        className={
+          isAdmin ? "atlas-app-frame atlas-app-frame--admin" : "atlas-app-frame atlas-app-frame--auth"
+        }
+      >
+        {children}
+      </div>
+    );
+  }
 
   if (mode === "loading") {
     return <div className="atlas-device-check">Loading Atlas…</div>;

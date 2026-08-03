@@ -4,6 +4,7 @@ import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { getMcpServer, updateMcpServerHealth, updateMcpClassification } from "@/lib/atlas/server/model-registry";
 import { withMcpServer } from "@/lib/atlas/server/mcp-client";
 import { classifyMcpServer } from "@/lib/atlas/mcp/roles";
+import { invalidateToolCache, primeToolCache, setCachedCapabilities } from "@/lib/atlas/mcp/registry";
 import { prisma } from "@/lib/atlas/server/prisma";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -30,16 +31,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    invalidateToolCache(server.id);
     const tools = await withMcpServer(
       { url: server.url ?? undefined, token: server.token ?? undefined, command: server.command, args: server.args, env: server.env },
       async (client) => client.listTools()
     );
 
+    primeToolCache(server.id, tools);
     await updateMcpServerHealth(server.id, tools.length, null);
 
     // Auto-classify from discovered tool metadata (names + descriptions).
     const classification = classifyMcpServer(tools);
     await updateMcpClassification(server.id, classification.roles, classification.toolRoles);
+    setCachedCapabilities(server.id, {
+      roles: classification.roles,
+      toolRoles: classification.toolRoles as Record<string, string[]>,
+      toolCount: tools.length,
+    });
     await prisma.mcpServer.update({ where: { id: server.id }, data: { domain: classification.domain } }).catch(() => {});
 
     return NextResponse.json({

@@ -1,61 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { AtlasDemoProvider } from "./atlas-demo-provider";
+import { AtlasChatProvider } from "./atlas-chat-provider";
 import { AtlasAuthControls } from "./atlas-auth-controls";
 import { atlasTabs } from "@/lib/atlas/navigation";
-import { MenuIcon, TAB_ICONS } from "./icons";
+import { TAB_ICONS } from "./icons";
 
 interface AtlasShellProps {
   children: ReactNode;
 }
 
-export function AtlasShell({ children }: AtlasShellProps) {
-  const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+function AdminShell({ children }: { children: ReactNode }) {
   const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
+  return (
+    <div className="atlas-app atlas-app--admin">
+      <div className="atlas-shell atlas-shell--admin">
+        <header className="atlas-admin-topbar">
+          <Link href="/" className="atlas-admin-topbar__back">
+            ← Back to app
+          </Link>
+          <div className="atlas-admin-topbar__account">
+            {clerkEnabled ? <AtlasAuthControls /> : <span className="atlas-micro">Local operator</span>}
+          </div>
+        </header>
+        <main className="atlas-content atlas-content--admin">{children}</main>
+      </div>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
+function ConsumerShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
 
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [menuOpen]);
-
-  const currentTitle = useMemo(() => {
-    return atlasTabs.find((tab) => tab.href === pathname)?.label ?? "Atlas";
-  }, [pathname]);
-
-  const visibleTabs = atlasTabs.filter((tab) => !tab.adminOnly || clerkEnabled);
+  // Consumer app only — admin stays out of primary nav.
+  const visibleTabs = atlasTabs.filter((tab) => !tab.adminOnly);
 
   return (
-    <AtlasDemoProvider>
+    <AtlasChatProvider>
       <div className="atlas-app">
-        <div className="atlas-shell">
-          <header className="atlas-topbar">
-            <button
-              type="button"
-              className="atlas-topbar__menu"
-              aria-label="Open menu"
-              onClick={() => setMenuOpen(true)}
-            >
-              <MenuIcon width={18} height={18} />
-            </button>
-            <div className="atlas-topbar__title">{currentTitle}</div>
-            <span className="atlas-topbar__spacer" aria-hidden="true" />
-          </header>
-
+        <div className="atlas-shell atlas-shell--consumer">
           <main className="atlas-content">{children}</main>
 
-          {/* Mobile bottom tab bar — ChatGPT-style primary navigation. */}
           <nav className="atlas-bottomnav" aria-label="Primary">
             {visibleTabs.map((tab) => {
               const active = pathname === tab.href;
@@ -76,47 +66,19 @@ export function AtlasShell({ children }: AtlasShellProps) {
               );
             })}
           </nav>
-
-          <button
-            type="button"
-            className="atlas-menu-overlay"
-            data-open={menuOpen ? "true" : "false"}
-            aria-label="Close menu"
-            aria-hidden={menuOpen ? "false" : "true"}
-            tabIndex={menuOpen ? 0 : -1}
-            onClick={() => setMenuOpen(false)}
-          />
-
-          <aside className="atlas-menu-drawer" data-open={menuOpen ? "true" : "false"} aria-hidden={!menuOpen}>
-            <div className="atlas-menu-drawer__sheet">
-              <div className="atlas-menu-drawer__top">
-                <div>
-                  <p className="atlas-hero__subtle">Atlas</p>
-                  <h2 className="atlas-menu-drawer__title">Menu</h2>
-                </div>
-                <button
-                  type="button"
-                  className="atlas-action atlas-action--ghost atlas-menu-drawer__close"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="atlas-menu-drawer__section">
-                <p className="atlas-menu-drawer__eyebrow">Account</p>
-                {clerkEnabled ? (
-                  <AtlasAuthControls />
-                ) : (
-                  <p className="atlas-menu-drawer__body">
-                    Sign in to unlock saved memory, approvals, and cross-device sync.
-                  </p>
-                )}
-              </div>
-            </div>
-          </aside>
         </div>
       </div>
+    </AtlasChatProvider>
+  );
+}
+
+export function AtlasShell({ children }: AtlasShellProps) {
+  const pathname = usePathname();
+  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+
+  return (
+    <AtlasDemoProvider>
+      {isAdmin ? <AdminShell>{children}</AdminShell> : <ConsumerShell>{children}</ConsumerShell>}
     </AtlasDemoProvider>
   );
 }

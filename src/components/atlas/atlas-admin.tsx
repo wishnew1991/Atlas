@@ -8,6 +8,12 @@ import type {
   AtlasProvider,
   AtlasMcpServer,
 } from "@/lib/atlas/server/model-registry";
+import {
+  STT_MODE_LABELS,
+  TTS_MODE_LABELS,
+  VOICE_STT_MODES,
+  VOICE_TTS_MODES,
+} from "@/lib/atlas/voice-modes";
 
 interface ModelConfig {
   id: string;
@@ -28,14 +34,34 @@ const providers: AtlasProvider[] = ["openai", "anthropic", "google", "nvidia", "
 
 const builtInDomains = ["shopping", "travel", "food", "rides", "appointments"];
 
-const adminTabs = [
-  { id: "providers", label: "Providers", icon: "◆" },
-  { id: "routing", label: "Routing", icon: "⇄" },
-  { id: "mcp", label: "MCP", icon: "🔌" },
-  { id: "search", label: "Search", icon: "🔎" },
-  { id: "domains", label: "Domains", icon: "⌂" },
-  { id: "voice", label: "Voice", icon: "🎙️" },
-] as const;
+type AdminTab = "providers" | "routing" | "mcp" | "search" | "domains" | "voice";
+
+const adminNav: ReadonlyArray<{
+  group: string;
+  items: ReadonlyArray<{ id: AdminTab; label: string }>;
+}> = [
+  {
+    group: "Models",
+    items: [
+      { id: "providers", label: "Providers" },
+      { id: "routing", label: "Routing" },
+    ],
+  },
+  {
+    group: "Services",
+    items: [
+      { id: "mcp", label: "MCP" },
+      { id: "search", label: "Search" },
+    ],
+  },
+  {
+    group: "Experience",
+    items: [
+      { id: "domains", label: "Domains" },
+      { id: "voice", label: "Voice" },
+    ],
+  },
+];
 
 const providerMeta: Record<AtlasProvider, { label: string; hint: string }> = {
   openai: { label: "OpenAI", hint: "platform.openai.com" },
@@ -44,8 +70,6 @@ const providerMeta: Record<AtlasProvider, { label: string; hint: string }> = {
   nvidia: { label: "NVIDIA", hint: "build.nvidia.com" },
   custom: { label: "Custom", hint: "OpenAI-compatible endpoint" },
 };
-
-type AdminTab = (typeof adminTabs)[number]["id"];
 
 function AddModelForm({
   credential,
@@ -138,8 +162,15 @@ export function AtlasAdmin() {
     ttsVoiceURI: "",
     ttsRate: 1,
     ttsPitch: 1,
+    sttModelId: "",
+    ttsModelId: "local:piper",
+    sttMode: "native_first",
+    ttsMode: "server_first",
   });
-  const [browserVoices, setBrowserVoices] = useState<{ name: string; voiceURI: string }[]>([]);
+  const [sttModelOptions, setSttModelOptions] = useState<{ id: string; label: string }[]>([]);
+  const [ttsModelOptions, setTtsModelOptions] = useState<{ id: string; label: string }[]>([]);
+  const [piperAvailable, setPiperAvailable] = useState(false);
+  const [ttsTesting, setTtsTesting] = useState(false);
   const [serperKey, setSerperKey] = useState("");
   const [serperConfigured, setSerperConfigured] = useState(false);
   const [serperTesting, setSerperTesting] = useState(false);
@@ -186,31 +217,44 @@ export function AtlasAdmin() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return;
-    }
-
-    const sync = () => {
-      setBrowserVoices(
-        window.speechSynthesis.getVoices().map((voice) => ({ name: voice.name, voiceURI: voice.voiceURI }))
-      );
-    };
-
-    sync();
-    window.speechSynthesis.onvoiceschanged = sync;
-
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, []);
-
   const loadVoice = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/voice");
       const payload = await response.json();
       if (response.ok && payload.voice) {
-        setVoice(payload.voice);
+        const sttOptions = Array.isArray(payload.sttModels)
+          ? payload.sttModels.map((entry: { id: string; label: string }) => ({
+              id: entry.id,
+              label: entry.label,
+            }))
+          : [];
+        const ttsOptions = Array.isArray(payload.ttsModels)
+          ? payload.ttsModels.map((entry: { id: string; label: string }) => ({
+              id: entry.id,
+              label: entry.label,
+            }))
+          : [];
+
+        setSttModelOptions(sttOptions);
+        setTtsModelOptions(ttsOptions);
+        setPiperAvailable(payload.piperAvailable === true);
+
+        const sttIds = new Set(sttOptions.map((entry: { id: string }) => entry.id));
+        const ttsIds = new Set(ttsOptions.map((entry: { id: string }) => entry.id));
+        const savedStt = typeof payload.voice.sttModelId === "string" ? payload.voice.sttModelId : "";
+        const savedTts = typeof payload.voice.ttsModelId === "string" ? payload.voice.ttsModelId : "";
+
+        setVoice({
+          sttLanguage: payload.voice.sttLanguage ?? "en-US",
+          ttsVoiceURI: payload.voice.ttsVoiceURI ?? "",
+          ttsRate: payload.voice.ttsRate ?? 1,
+          ttsPitch: payload.voice.ttsPitch ?? 1,
+          // Only keep a selection if it is still detected as STT/TTS-capable.
+          sttModelId: savedStt && sttIds.has(savedStt) ? savedStt : sttOptions[0]?.id ?? "",
+          ttsModelId: savedTts && ttsIds.has(savedTts) ? savedTts : ttsOptions[0]?.id ?? "",
+          sttMode: payload.voice.sttMode ?? "native_first",
+          ttsMode: payload.voice.ttsMode ?? "server_first",
+        });
       }
     } catch {
       /* non-admin */
@@ -220,6 +264,12 @@ export function AtlasAdmin() {
   useEffect(() => {
     void loadVoice();
   }, [loadVoice]);
+
+  useEffect(() => {
+    if (activeTab === "voice") {
+      void loadVoice();
+    }
+  }, [activeTab, loadVoice]);
 
   const loadSearchConfig = useCallback(async () => {
     try {
@@ -509,11 +559,73 @@ export function AtlasAdmin() {
         return;
       }
 
-      setVoice(payload.voice);
-      setNotice("Voice configuration saved.");
+      setVoice({
+        sttLanguage: payload.voice.sttLanguage ?? "en-US",
+        ttsVoiceURI: payload.voice.ttsVoiceURI ?? "",
+        ttsRate: payload.voice.ttsRate ?? 1,
+        ttsPitch: payload.voice.ttsPitch ?? 1,
+        sttModelId: payload.voice.sttModelId ?? "",
+        ttsModelId: payload.voice.ttsModelId ?? "local:piper",
+        sttMode: payload.voice.sttMode ?? "native_first",
+        ttsMode: payload.voice.ttsMode ?? "server_first",
+      });
+      setNotice("Voice configuration saved. Mic and speak in chat will use these modes and models.");
       setError(null);
     } catch {
       setError("Could not save voice config.");
+    }
+  };
+
+  const testTts = async () => {
+    setTtsTesting(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/voice/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Atlas voice check. Text to speech is working." }),
+      });
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok) {
+        const payload = contentType.includes("application/json")
+          ? await response.json().catch(() => ({}))
+          : {};
+        setError((payload as { error?: string }).error || "TTS test failed.");
+        return;
+      }
+
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength < 44) {
+        setError("TTS returned empty audio.");
+        return;
+      }
+
+      const blob = new Blob([buffer], { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.src = url;
+
+      await new Promise<void>((resolve, reject) => {
+        audio.oncanplaythrough = () => resolve();
+        audio.onerror = () => reject(new Error("Browser could not decode the TTS audio."));
+        // Some browsers never fire canplaythrough for short clips.
+        window.setTimeout(() => resolve(), 500);
+      });
+
+      await audio.play();
+      audio.onended = () => URL.revokeObjectURL(url);
+      setNotice("TTS test played successfully.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "TTS test failed.";
+      setError(
+        message.includes("NotAllowedError") || message.includes("play()")
+          ? "Browser blocked audio playback. Click Test TTS again (needs a user gesture)."
+          : `${message} Check Admin → Voice TTS target and Piper install.`
+      );
+    } finally {
+      setTtsTesting(false);
     }
   };
 
@@ -731,51 +843,58 @@ export function AtlasAdmin() {
   };
 
   return (
-    <div className="atlas-page">
-      <section className="atlas-hero">
-        <div className="atlas-card atlas-card--dark">
-          <div className="atlas-mini-stack">
-            <p className="atlas-hero__subtle">Admin</p>
-            <h1 className="atlas-hero__title">Control center</h1>
-            <p className="atlas-hero__lede" style={{ color: "rgba(241, 245, 249, 0.76)" }}>
-              Choose which provider and model powers each domain. API keys are stored
-              server-side only and never sent to the browser.
-            </p>
+    <div className="atlas-admin">
+      <aside className="atlas-admin__nav" aria-label="Admin sections">
+        <div className="atlas-admin__nav-head">
+          <p className="atlas-admin__nav-eyebrow">Configure</p>
+          <h1 className="atlas-admin__nav-title">Control plane</h1>
+        </div>
+
+        {adminNav.map((section) => (
+          <div className="atlas-admin__nav-group" key={section.group}>
+            <p className="atlas-admin__nav-group-label">{section.group}</p>
+            {section.items.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className="atlas-admin__nav-link"
+                data-active={activeTab === tab.id ? "true" : "false"}
+                onClick={() => setActiveTab(tab.id)}
+                aria-pressed={activeTab === tab.id}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        </div>
-      </section>
-
-      {error ? (
-        <div className="atlas-banner atlas-banner--error">
-          <span className="atlas-banner__dot" aria-hidden="true" />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      {notice ? (
-        <div className="atlas-banner atlas-banner--success">
-          <span className="atlas-banner__dot" aria-hidden="true" />
-          <span>{notice}</span>
-        </div>
-      ) : null}
-
-      <nav className="atlas-admin-tabs" aria-label="Admin sections">
-        {adminTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className="atlas-admin-tabs__tab"
-            data-active={activeTab === tab.id ? "true" : "false"}
-            onClick={() => setActiveTab(tab.id)}
-            aria-pressed={activeTab === tab.id}
-          >
-            <span className="atlas-admin-tabs__icon" aria-hidden="true">
-              {tab.icon}
-            </span>
-            {tab.label}
-          </button>
         ))}
-      </nav>
+
+        <div className="atlas-admin__nav-status">
+          <span className={`atlas-badge ${credentials.length > 0 ? "atlas-badge--green" : ""}`}>
+            {credentials.length} provider{credentials.length === 1 ? "" : "s"}
+          </span>
+          <span className={`atlas-badge ${mcpServers.length > 0 ? "atlas-badge--green" : ""}`}>
+            {mcpServers.length} MCP
+          </span>
+          <span className={`atlas-badge ${models.some((m) => m.enabled) ? "atlas-badge--green" : ""}`}>
+            {models.filter((m) => m.enabled).length} models
+          </span>
+        </div>
+      </aside>
+
+      <div className="atlas-admin__main">
+        {error ? (
+          <div className="atlas-banner atlas-banner--error">
+            <span className="atlas-banner__dot" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+
+        {notice ? (
+          <div className="atlas-banner atlas-banner--success">
+            <span className="atlas-banner__dot" aria-hidden="true" />
+            <span>{notice}</span>
+          </div>
+        ) : null}
 
       {activeTab === "providers" ? (
         <div className="atlas-admin-panel">
@@ -1344,13 +1463,72 @@ export function AtlasAdmin() {
       <section className="atlas-section">
         <div className="atlas-section__header">
           <p className="atlas-section__eyebrow">Voice</p>
-          <h2 className="atlas-section__title">STT / TTS settings</h2>
+          <h2 className="atlas-section__title">STT / TTS routing</h2>
           <p className="atlas-section__copy">
-            Speech-to-text language and text-to-speech voice used by the browser voice assistant.
-            Voices are provided by the user&apos;s browser.
+            Prefer device speech for the mic, and server TTS (Piper) for replies — with automatic
+            fallback. Modes are Capacitor-ready for Android/iOS later. Model dropdowns only apply
+            when the server engine is used.
           </p>
-        </div>        <form className="atlas-card" onSubmit={saveVoice}>
+        </div>
+
+        <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
+          <span className={`atlas-badge ${sttModelOptions.length > 0 ? "atlas-badge--green" : ""}`}>
+            STT {sttModelOptions.length > 0 ? `${sttModelOptions.length} detected` : "none detected"}
+          </span>
+          <span className={`atlas-badge ${ttsModelOptions.length > 0 ? "atlas-badge--green" : ""}`}>
+            TTS {ttsModelOptions.length > 0 ? `${ttsModelOptions.length} detected` : "none detected"}
+          </span>
+        </div>
+
+        <form className="atlas-card" onSubmit={saveVoice}>
           <div className="atlas-grid atlas-grid--2">
+            <label className="atlas-assistant__composer-field">
+              <span className="atlas-assistant__composer-label">STT mode (microphone)</span>
+              <select
+                className="atlas-assistant__composer-value"
+                value={voice.sttMode}
+                onChange={(event) => setVoice({ ...voice, sttMode: event.target.value })}
+              >
+                {VOICE_STT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {STT_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="atlas-assistant__composer-field">
+              <span className="atlas-assistant__composer-label">TTS mode (spoken replies)</span>
+              <select
+                className="atlas-assistant__composer-value"
+                value={voice.ttsMode}
+                onChange={(event) => setVoice({ ...voice, ttsMode: event.target.value })}
+              >
+                {VOICE_TTS_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {TTS_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="atlas-assistant__composer-field">
+              <span className="atlas-assistant__composer-label">STT model (server fallback)</span>
+              <select
+                className="atlas-assistant__composer-value"
+                value={voice.sttModelId}
+                onChange={(event) => setVoice({ ...voice, sttModelId: event.target.value })}
+                disabled={sttModelOptions.length === 0}
+              >
+                {sttModelOptions.length === 0 ? (
+                  <option value="">No STT-capable models detected</option>
+                ) : (
+                  sttModelOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
             <label className="atlas-assistant__composer-field">
               <span className="atlas-assistant__composer-label">STT language</span>
               <input
@@ -1361,19 +1539,33 @@ export function AtlasAdmin() {
               />
             </label>
             <label className="atlas-assistant__composer-field">
-              <span className="atlas-assistant__composer-label">TTS voice</span>
+              <span className="atlas-assistant__composer-label">TTS target (server)</span>
               <select
+                className="atlas-assistant__composer-value"
+                value={voice.ttsModelId}
+                onChange={(event) => setVoice({ ...voice, ttsModelId: event.target.value })}
+                disabled={ttsModelOptions.length === 0}
+              >
+                {ttsModelOptions.length === 0 ? (
+                  <option value="">No TTS-capable engines detected</option>
+                ) : (
+                  ttsModelOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="atlas-assistant__composer-field">
+              <span className="atlas-assistant__composer-label">Piper voice id (when using Local Piper)</span>
+              <input
                 className="atlas-assistant__composer-value"
                 value={voice.ttsVoiceURI}
                 onChange={(event) => setVoice({ ...voice, ttsVoiceURI: event.target.value })}
-              >
-                <option value="">Browser default</option>
-                {browserVoices.map((browserVoice) => (
-                  <option key={browserVoice.voiceURI} value={browserVoice.voiceURI}>
-                    {browserVoice.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="en_US-lessac-medium"
+                disabled={voice.ttsModelId !== "local:piper" && !voice.ttsModelId.startsWith("piper:")}
+              />
             </label>
             <label className="atlas-assistant__composer-field">
               <span className="atlas-assistant__composer-label">TTS rate ({voice.ttsRate})</span>
@@ -1387,7 +1579,7 @@ export function AtlasAdmin() {
               />
             </label>
             <label className="atlas-assistant__composer-field">
-              <span className="atlas-assistant__composer-label">TTS pitch ({voice.ttsPitch})</span>
+              <span className="atlas-assistant__composer-label">TTS pitch ({voice.ttsPitch}) — device TTS</span>
               <input
                 type="range"
                 min={0}
@@ -1398,15 +1590,37 @@ export function AtlasAdmin() {
               />
             </label>
           </div>
-          <div style={{ marginTop: 14 }}>
+          <p className="atlas-micro" style={{ marginTop: 12 }}>
+            Default: mic uses device speech first, then Whisper/omni. Replies use Piper/server first,
+            then device speechSynthesis. iOS Safari often lacks Web Speech STT — server STT covers that.
+            {sttModelOptions.length === 0
+              ? " Add a Whisper or omni model under Providers for server STT fallback."
+              : ""}
+            {!piperAvailable && ttsModelOptions.length === 0
+              ? " Install Piper or add a TTS model for server spoken replies."
+              : ""}
+          </p>
+          <div className="atlas-chip-row" style={{ marginTop: 14 }}>
             <button type="submit" className="atlas-action atlas-action--primary">
               Save voice config
+            </button>
+            <button
+              type="button"
+              className="atlas-action atlas-action--ghost"
+              onClick={() => void testTts()}
+              disabled={ttsTesting || ttsModelOptions.length === 0}
+            >
+              {ttsTesting ? "Testing…" : "Test TTS"}
+            </button>
+            <button type="button" className="atlas-action atlas-action--ghost" onClick={() => void loadVoice()}>
+              Refresh detection
             </button>
           </div>
         </form>
       </section>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
