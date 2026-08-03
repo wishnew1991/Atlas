@@ -1,7 +1,8 @@
 /**
  * Execution Engine
- * Bridges the existing chat system with the new execution model
- * This is a compatibility layer that will evolve into the full execution engine
+ * Bridges the existing chat system with the new execution model.
+ * Resolves a live model and runs the LLM + tool loop when available;
+ * falls back to the supplied demo fallback when no model is configured.
  */
 
 import "server-only";
@@ -13,17 +14,27 @@ import type {
 } from "@/lib/atlas/agent-contract";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import type { AtlasStreamChunk } from "@/lib/atlas/server/agent/reply";
-import { createAtlasReplyCore, streamAtlasReplyCore } from "@/lib/atlas/server/agent/reply";
+import { resolveActiveModel } from "@/lib/atlas/server/agent/reply";
 import { prisma } from "@/lib/atlas/server/prisma";
+import { chat, streamChat, type LlmMessage } from "@/lib/atlas/llm";
+import { executeTool, getToolSchemas, type ToolContext } from "@/lib/atlas/tools/registry";
+import { historyToLlmMessages } from "@/lib/atlas/conversation/history";
+import { buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
+import {
+  buildFollowUpMessages,
+  resolveToolCalls,
+  sanitizeAssistantText,
+} from "@/lib/atlas/server/agent/tools";
 import type { Execution } from "./types";
 import {
   createExecution,
   updateExecutionStatus,
   addExecutionResult,
   updateExecutionState,
-  incrementExecutionProgress,
   getExecution,
 } from "./manager";
+
+const MAX_TOOL_ROUNDS = 5;
 
 export type GenerateReply = (
   message: string,
@@ -33,11 +44,169 @@ export type GenerateReply = (
   options?: { conversationId?: string; executionId?: string }
 ) => Promise<AtlasChatResponse>;
 
+// ---------------------------------------------------------------------------
+// Live pipeline — runs when a model is configured
+// ---------------------------------------------------------------------------
+
+async function liveGenerateReply(
+  message: string,
+  history: AtlasChatHistoryItem[],
+  userId: string,
+  capabilities: AtlasCapabilities,
+  options?: { conversationId?: string; executionId?: string }
+): Promise<AtlasChatResponse> {
+  const activeModel = await resolveActiveModel("general");
+  if (!activeModel) {
+    throw new Error("No model configured — cannot run live pipeline.");
+  }
+
+  const systemPrompt = buildSystemPrompt([]);
+  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
+
+  const toolDefs = await getToolSchemas();
+
+  const toolContext: ToolContext = {
+    userId,
+    history: history.map((item) => ({ role: item.role, text: item.text })),
+  };
+
+  let messages: LlmMessage[] = baseMessages;
+  const toolsUsed: string[] = [];
+  let lastAction: AtlasPendingAction | undefined;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const result = await chat({
+      model: activeModel.id,
+      messages,
+      tools: toolDefs.length > 0 ? toolDefs : undefined,
+      toolChoice: "auto",
+      temperature: 0.3,
+      maxTokens: 2048,
+      apiKey: activeModel.apiKey,
+      baseUrl: activeModel.baseUrl,
+      provider: activeModel.provider,
+    });
+
+    const toolCalls = resolveToolCalls(result);
+    if (toolCalls.length === 0) {
+      const reply = sanitizeAssistantText(result.content);
+      return {
+        reply: reply || "I wasn't sure how to help with that. Could you rephrase?",
+        mode: "live",
+        toolsUsed,
+      };
+    }
+
+    const results = [];
+    for (const call of toolCalls) {
+      const parsed = JSON.parse(call.arguments || "{}");
+      const execResult = await executeTool(call.name, parsed, toolContext);
+      results.push(execResult);
+      toolsUsed.push(call.name);
+      if (execResult.action) {
+        lastAction = execResult.action;
+      }
+    }
+
+    messages = buildFollowUpMessages(messages, result.content, toolCalls, results);
+  }
+
+  const lastMsg = messages[messages.length - 1];
+  const finalContent =
+    lastMsg?.role === "assistant" && typeof lastMsg.content === "string"
+      ? sanitizeAssistantText(lastMsg.content)
+      : "";
+
+  return {
+    reply: finalContent || "I've looked into that but ran out of steps. Let me know how to proceed.",
+    mode: "live",
+    toolsUsed,
+    action: lastAction,
+  };
+}
+
+async function* liveStreamGenerateReply(
+  message: string,
+  history: AtlasChatHistoryItem[],
+  userId: string,
+  capabilities: AtlasCapabilities,
+  options?: { conversationId?: string; executionId?: string }
+): AsyncGenerator<AtlasStreamChunk> {
+  const activeModel = await resolveActiveModel("general");
+  if (!activeModel) {
+    throw new Error("No model configured — cannot run live streaming pipeline.");
+  }
+
+  const systemPrompt = buildSystemPrompt([]);
+  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
+
+  const toolDefs = await getToolSchemas();
+
+  const toolContext: ToolContext = {
+    userId,
+    history: history.map((item) => ({ role: item.role, text: item.text })),
+  };
+
+  let messages: LlmMessage[] = baseMessages;
+  const toolsUsed: string[] = [];
+  let lastAction: AtlasPendingAction | undefined;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    let fullContent = "";
+    const streamToolCalls: { id: string; name: string; arguments: string }[] = [];
+
+    for await (const chunk of streamChat({
+      model: activeModel.id,
+      messages,
+      tools: toolDefs.length > 0 ? toolDefs : undefined,
+      toolChoice: "auto",
+      temperature: 0.3,
+      maxTokens: 2048,
+      apiKey: activeModel.apiKey,
+      baseUrl: activeModel.baseUrl,
+      provider: activeModel.provider,
+    })) {
+      if (chunk.type === "token") {
+        fullContent += chunk.text;
+        yield { text: chunk.text };
+      } else if (chunk.type === "tool_call") {
+        streamToolCalls.push(chunk.call);
+      }
+    }
+
+    if (streamToolCalls.length === 0) {
+      yield { done: true };
+      return;
+    }
+
+    const results = [];
+    for (const call of streamToolCalls) {
+      const parsed = JSON.parse(call.arguments || "{}");
+      const execResult = await executeTool(call.name, parsed, toolContext);
+      results.push(execResult);
+      toolsUsed.push(call.name);
+      if (execResult.action) {
+        lastAction = execResult.action;
+      }
+    }
+
+    messages = buildFollowUpMessages(messages, fullContent, streamToolCalls, results);
+  }
+
+  if (lastAction) {
+    yield { action: lastAction };
+  }
+  yield { done: true };
+}
+
+// ---------------------------------------------------------------------------
+// Public engine API — wraps live pipeline + execution lifecycle
+// ---------------------------------------------------------------------------
+
 /**
  * Run a chat execution through the execution engine.
- * If an executionId is provided, it reuses that execution (e.g. created by the
- * chat route); otherwise it creates a new one. The execution is transitioned
- * planning → executing → completed and the reply is stored as a result.
+ * Checks for a live model first; if available, runs the LLM + tool loop.
+ * Otherwise falls back to the supplied generateReply (typically demoResponse).
  */
 export async function runChatExecution(
   message: string,
@@ -48,20 +217,18 @@ export async function runChatExecution(
   options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse & { conversationId?: string; runId?: string; executionId?: string }> {
   const execution = await getOrCreateExecution(message, userId, capabilities, options);
-
   await updateExecutionStatus(execution.id, "executing");
 
   const startedAt = Date.now();
   let response: AtlasChatResponse;
+
   try {
-    response = await createAtlasReplyCore(
-      message,
-      history,
-      userId,
-      capabilities,
-      generateReply,
-      { conversationId: options?.conversationId, executionId: execution.id }
-    );
+    const hasModel = await resolveActiveModel("general").catch(() => null);
+    if (hasModel) {
+      response = await liveGenerateReply(message, history, userId, capabilities, options);
+    } else {
+      response = await generateReply(message, history, userId, capabilities, options);
+    }
   } catch (error) {
     await updateExecutionStatus(execution.id, "failed");
     throw error;
@@ -108,9 +275,8 @@ export async function runChatExecution(
 
 /**
  * Stream a chat execution through the execution engine.
- * Reuses an existing execution when executionId is provided; otherwise creates
- * one. The reply is streamed via the core reply generator and the execution is
- * updated as the stream progresses.
+ * Checks for a live model first; if available, streams LLM tokens and executes
+ * tools in a loop. Otherwise falls back to the supplied generateReply.
  */
 export async function* streamChatExecution(
   message: string,
@@ -129,37 +295,41 @@ export async function* streamChatExecution(
   let pendingAction: AtlasPendingAction | undefined;
 
   try {
-    for await (const chunk of streamAtlasReplyCore(
-      message,
-      history,
-      userId,
-      capabilities,
-      generateReply,
-      signal,
-      { conversationId: options?.conversationId, executionId: execution.id }
-    )) {
+    const hasModel = await resolveActiveModel("general").catch(() => null);
+    const execId = execution.id;
+
+    if (hasModel) {
+      for await (const chunk of liveStreamGenerateReply(
+        message,
+        history,
+        userId,
+        capabilities,
+        { ...options, executionId: execId }
+      )) {
+        yield { ...chunk, executionId: execId };
+
+        if (chunk.action) {
+          pendingAction = chunk.action;
+        }
+        if (chunk.done) {
+          completed = true;
+        }
+      }
+    } else {
+      const fallbackResponse = await generateReply(message, history, userId, capabilities, {
+        ...options,
+        executionId: execId,
+      });
       yield {
-        ...chunk,
-        executionId: execution.id,
+        text: fallbackResponse.reply,
+        action: fallbackResponse.action,
+        done: true,
+        executionId: execId,
       };
-
-      if (chunk.stage) {
-        await updateExecutionState(execution.id, {
-          progress: {
-            currentStep: chunk.stage.status === "completed" ? 1 : 0,
-            totalSteps: 1,
-            percentage: chunk.stage.status === "completed" ? 100 : 50,
-          },
-        });
+      if (fallbackResponse.action) {
+        pendingAction = fallbackResponse.action;
       }
-
-      if (chunk.action) {
-        pendingAction = chunk.action;
-      }
-
-      if (chunk.done) {
-        completed = true;
-      }
+      completed = true;
     }
   } catch (error) {
     await updateExecutionStatus(execution.id, "failed");
@@ -196,6 +366,10 @@ export async function* streamChatExecution(
     timestamp: new Date(),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 async function getOrCreateExecution(
   message: string,
