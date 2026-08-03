@@ -25,6 +25,7 @@ import {
   resolveToolCalls,
   sanitizeAssistantText,
 } from "@/lib/atlas/server/agent/tools";
+import { inferDomain } from "@/lib/atlas/domain";
 import type { Execution } from "./types";
 import {
   createExecution,
@@ -35,32 +36,6 @@ import {
 } from "./manager";
 
 const MAX_TOOL_ROUNDS = 5;
-
-const DOMAIN_KEYWORDS: { domain: string; pattern: RegExp }[] = [
-  { domain: "food", pattern: /\b(food|restaurant|biryani|dinner|lunch|breakfast|swiggy|zomato|deliver|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving|order\s+(food|from))\b/i },
-  { domain: "travel", pattern: /\b(flight|flights|hotel|hotels|trip|trips|travel|vacation|itinerary|airbnb|airline)\b/i },
-  { domain: "rides", pattern: /\b(ride|rides|uber|ola|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop)\b/i },
-  { domain: "appointments", pattern: /\b(appointment|doctor|salon|spa|meeting|book\s+a\s+(slot|appointment)|dentist|consultation)\b/i },
-  { domain: "shopping", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|amazon|flipkart|order\s+(a|the|some))\b/i },
-];
-
-function inferDomain(text: string, history?: AtlasChatHistoryItem[]): string {
-  // Check recent conversation history first — a "yes" after a food conversation
-  // should stay on the food domain, not fall back to "general".
-  if (history && history.length > 0) {
-    const recent = history.slice(-6);
-    for (const item of recent) {
-      for (const { domain, pattern } of DOMAIN_KEYWORDS) {
-        if (pattern.test(item.text)) return domain;
-      }
-    }
-  }
-  // Fall back to keyword inference on the current message.
-  for (const { domain, pattern } of DOMAIN_KEYWORDS) {
-    if (pattern.test(text)) return domain;
-  }
-  return "general";
-}
 
 export type GenerateReply = (
   message: string,

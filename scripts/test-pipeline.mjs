@@ -259,6 +259,84 @@ section("Regression guards");
     assert.equal(state.isContinuationUtterance("order me a pizza"), false));
 }
 
+section("inferDomain — current message precedence");
+{
+  const { inferDomain } = await loadTsModule("src/lib/atlas/domain.ts", "domain.mjs");
+
+  await test("bare 'yes' with food history resolves to food", () => {
+    const history = [
+      { role: "user", text: "I am hungry" },
+      { role: "assistant", text: "What would you like?" },
+      { role: "user", text: "chicken biryani" },
+    ];
+    assert.equal(inferDomain("yes", history), "food");
+  });
+
+  await test("'that one' with food history resolves to food", () => {
+    const history = [
+      { role: "user", text: "show me biryani places" },
+      { role: "assistant", text: "Here are 3 options" },
+    ];
+    assert.equal(inferDomain("that one", history), "food");
+  });
+
+  await test("topic switch overrides history — 'book a flight' after food → travel", () => {
+    const history = [
+      { role: "user", text: "I am hungry" },
+      { role: "assistant", text: "What would you like?" },
+    ];
+    assert.equal(inferDomain("book a flight to Delhi", history), "travel");
+  });
+
+  await test("topic switch overrides history — 'schedule a meeting' after food → appointments", () => {
+    const history = [
+      { role: "user", text: "order me a pizza" },
+    ];
+    assert.equal(inferDomain("schedule a meeting with the team", history), "appointments");
+  });
+
+  await test("current message with no history returns general", () => {
+    assert.equal(inferDomain("hello"), "general");
+  });
+
+  await test("no history + no domain keyword returns general", () => {
+    assert.equal(inferDomain("what time is it", []), "general");
+  });
+
+  await test("history older than 6 messages is ignored", () => {
+    // 10 biryani messages + 8 non-domain messages = 18 total
+    // Last 6 items are all "something else" / "ok" — no domain keyword
+    const history = [];
+    for (let i = 0; i < 10; i++) {
+      history.push({ role: "user", text: "I want biryani" });
+      history.push({ role: "assistant", text: "ok" });
+    }
+    for (let i = 0; i < 4; i++) {
+      history.push({ role: "user", text: "something else" });
+      history.push({ role: "assistant", text: "ok" });
+    }
+    assert.equal(inferDomain("yes", history), "general");
+  });
+
+  await test("history within 6 messages is used", () => {
+    const history = [
+      { role: "user", text: "I want biryani" },
+      { role: "assistant", text: "ok" },
+      { role: "user", text: "something else" },
+      { role: "assistant", text: "ok" },
+    ];
+    // Last 6 = all 4 items — includes "biryani" → food
+    assert.equal(inferDomain("yes", history), "food");
+  });
+
+  await test("food keyword in current message always wins regardless of history", () => {
+    const history = [
+      { role: "user", text: "book a flight" },
+    ];
+    assert.equal(inferDomain("order biryani", history), "food");
+  });
+}
+
 rmSync(work, { recursive: true, force: true });
 console.log(`\n${"=".repeat(60)}\n${passed} passed, ${failed} failed\n${"=".repeat(60)}`);
 process.exit(failed === 0 ? 0 : 1);
