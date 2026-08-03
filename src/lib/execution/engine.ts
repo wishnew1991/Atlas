@@ -195,10 +195,7 @@ async function* liveStreamGenerateReply(
     }
 
     if (streamToolCalls.length === 0) {
-      if (lastAction) {
-        yield { action: lastAction };
-      }
-      yield { done: true };
+      yield { done: true, action: lastAction };
       return;
     }
 
@@ -216,10 +213,7 @@ async function* liveStreamGenerateReply(
     messages = buildFollowUpMessages(messages, fullContent, streamToolCalls, results);
   }
 
-  if (lastAction) {
-    yield { action: lastAction };
-  }
-  yield { done: true };
+  yield { done: true, action: lastAction };
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +240,8 @@ export async function runChatExecution(
   let response: AtlasChatResponse;
 
   try {
-    const hasModel = await resolveActiveModel("general").catch(() => null);
+    const nonStreamDomain = inferDomain(message);
+    const hasModel = await resolveActiveModel(nonStreamDomain).catch(() => null);
     if (hasModel) {
       response = await liveGenerateReply(message, history, userId, capabilities, options);
     } else {
@@ -318,7 +313,8 @@ export async function* streamChatExecution(
   let pendingAction: AtlasPendingAction | undefined;
 
   try {
-    const hasModel = await resolveActiveModel("general").catch(() => null);
+    const streamDomain = inferDomain(message);
+    const hasModel = await resolveActiveModel(streamDomain).catch(() => null);
     const execId = execution.id;
 
     if (hasModel) {
