@@ -36,6 +36,21 @@ import {
 
 const MAX_TOOL_ROUNDS = 5;
 
+const DOMAIN_KEYWORDS: { domain: string; pattern: RegExp }[] = [
+  { domain: "food", pattern: /\b(food|restaurant|biryani|dinner|lunch|breakfast|swiggy|zomato|deliver|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving|order\s+(food|from))\b/i },
+  { domain: "travel", pattern: /\b(flight|flights|hotel|hotels|trip|trips|travel|vacation|itinerary|airbnb|airline)\b/i },
+  { domain: "rides", pattern: /\b(ride|rides|uber|ola|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop)\b/i },
+  { domain: "appointments", pattern: /\b(appointment|doctor|salon|spa|meeting|book\s+a\s+(slot|appointment)|dentist|consultation)\b/i },
+  { domain: "shopping", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|amazon|flipkart|order\s+(a|the|some))\b/i },
+];
+
+function inferDomain(text: string): string {
+  for (const { domain, pattern } of DOMAIN_KEYWORDS) {
+    if (pattern.test(text)) return domain;
+  }
+  return "general";
+}
+
 export type GenerateReply = (
   message: string,
   history: AtlasChatHistoryItem[],
@@ -55,7 +70,8 @@ async function liveGenerateReply(
   capabilities: AtlasCapabilities,
   options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse> {
-  const activeModel = await resolveActiveModel("general");
+  const domain = inferDomain(message);
+  const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live pipeline.");
   }
@@ -94,6 +110,7 @@ async function liveGenerateReply(
         reply: reply || "I wasn't sure how to help with that. Could you rephrase?",
         mode: "live",
         toolsUsed,
+        action: lastAction,
       };
     }
 
@@ -130,9 +147,11 @@ async function* liveStreamGenerateReply(
   history: AtlasChatHistoryItem[],
   userId: string,
   capabilities: AtlasCapabilities,
+  signal?: AbortSignal,
   options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  const activeModel = await resolveActiveModel("general");
+  const domain = inferDomain(message);
+  const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live streaming pipeline.");
   }
@@ -165,6 +184,7 @@ async function* liveStreamGenerateReply(
       apiKey: activeModel.apiKey,
       baseUrl: activeModel.baseUrl,
       provider: activeModel.provider,
+      signal,
     })) {
       if (chunk.type === "token") {
         fullContent += chunk.text;
@@ -175,6 +195,9 @@ async function* liveStreamGenerateReply(
     }
 
     if (streamToolCalls.length === 0) {
+      if (lastAction) {
+        yield { action: lastAction };
+      }
       yield { done: true };
       return;
     }
@@ -304,6 +327,7 @@ export async function* streamChatExecution(
         history,
         userId,
         capabilities,
+        signal,
         { ...options, executionId: execId }
       )) {
         yield { ...chunk, executionId: execId };
