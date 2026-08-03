@@ -47,6 +47,13 @@ import {
 
 const MAX_TOOL_ROUNDS = 5;
 
+const REASONING_PATTERNS = /\b(we need to|we should|let me|first.*call|call the tool|tool call|function call|the flow|the rule|according to|we'll assume|let's do|thus we need|make tool|passing.*to|in the spec|the description)\b/i;
+
+function looksLikeReasoning(text: string): boolean {
+  if (!text || text.length < 80) return false;
+  return REASONING_PATTERNS.test(text);
+}
+
 export type GenerateReply = (
   message: string,
   history: AtlasChatHistoryItem[],
@@ -54,6 +61,10 @@ export type GenerateReply = (
   capabilities: AtlasCapabilities,
   options?: { conversationId?: string; executionId?: string }
 ) => Promise<AtlasChatResponse>;
+
+// Module-level reference set by the engine so the live pipeline can fall back
+// to the demo responder when the model cannot call tools.
+let _demoFallback: GenerateReply | null = null;
 
 // ---------------------------------------------------------------------------
 // Live pipeline — runs when a model is configured
@@ -72,11 +83,24 @@ async function liveGenerateReply(
     throw new Error("No model configured — cannot run live pipeline.");
   }
 
-  const systemPrompt = buildSystemPrompt([]);
-  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
-
   const caps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
   const toolDefs = await getToolsForCapabilities(caps);
+
+  let systemPrompt = buildSystemPrompt([]);
+  if (toolDefs.length > 0) {
+    const foodToolNames = toolDefs.filter((t) => t.name.startsWith("food_")).map((t) => t.name).join(", ");
+    const otherToolNames = toolDefs.filter((t) => !t.name.startsWith("food_")).map((t) => t.name).join(", ");
+    systemPrompt += `\n\n## TOOL CALLING RULES (MANDATORY)\n`;
+    if (foodToolNames) {
+      systemPrompt += `You have food tools: ${foodToolNames}.\n`;
+      systemPrompt += `RULE: When the user mentions ANY food, restaurant, dish, meal, hunger, or ordering food, you MUST call food_set_address or food_find_restaurants FIRST. Do NOT call web_search for food. Do NOT respond with text — call the tool.\n`;
+    }
+    if (otherToolNames) {
+      systemPrompt += `Other tools: ${otherToolNames}\n`;
+    }
+    systemPrompt += `RULE: Always call the most specific tool for the user's request. Never explain what you would do — just call the tool.`;
+  }
+  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
 
   const toolContext: ToolContext = {
     userId,
@@ -102,6 +126,12 @@ async function liveGenerateReply(
 
     const toolCalls = resolveToolCalls(result);
     if (toolCalls.length === 0) {
+      // If the model outputs reasoning instead of tool calls on the first
+      // round, it likely doesn't support function calling. Fall back to the
+      // demo responder which handles domains via server-side orchestration.
+      if (round === 0 && _demoFallback && looksLikeReasoning(result.content)) {
+        return await _demoFallback(message, history, userId, capabilities, options);
+      }
       const reply = sanitizeAssistantText(result.content);
       return {
         reply: reply || "I wasn't sure how to help with that. Could you rephrase?",
@@ -153,11 +183,24 @@ async function* liveStreamGenerateReply(
     throw new Error("No model configured — cannot run live streaming pipeline.");
   }
 
-  const systemPrompt = buildSystemPrompt([]);
-  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
-
   const streamCaps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
   const toolDefs = await getToolsForCapabilities(streamCaps);
+
+  let systemPrompt = buildSystemPrompt([]);
+  if (toolDefs.length > 0) {
+    const foodToolNames = toolDefs.filter((t) => t.name.startsWith("food_")).map((t) => t.name).join(", ");
+    const otherToolNames = toolDefs.filter((t) => !t.name.startsWith("food_")).map((t) => t.name).join(", ");
+    systemPrompt += `\n\n## TOOL CALLING RULES (MANDATORY)\n`;
+    if (foodToolNames) {
+      systemPrompt += `You have food tools: ${foodToolNames}.\n`;
+      systemPrompt += `RULE: When the user mentions ANY food, restaurant, dish, meal, hunger, or ordering food, you MUST call food_set_address or food_find_restaurants FIRST. Do NOT call web_search for food. Do NOT respond with text — call the tool.\n`;
+    }
+    if (otherToolNames) {
+      systemPrompt += `Other tools: ${otherToolNames}\n`;
+    }
+    systemPrompt += `RULE: Always call the most specific tool for the user's request. Never explain what you would do — just call the tool.`;
+  }
+  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
 
   const toolContext: ToolContext = {
     userId,
@@ -171,7 +214,6 @@ async function* liveStreamGenerateReply(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let fullContent = "";
     const streamToolCalls: { id: string; name: string; arguments: string }[] = [];
-
     for await (const chunk of streamChat({
       model: activeModel.id,
       messages,
@@ -238,6 +280,7 @@ export async function runChatExecution(
   let response: AtlasChatResponse;
 
   try {
+    _demoFallback = generateReply;
     const nonStreamDomain = inferDomain(message, history);
     const hasModel = await resolveActiveModel(nonStreamDomain).catch(() => null);
     if (hasModel) {
