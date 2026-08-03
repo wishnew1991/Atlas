@@ -78,6 +78,14 @@ async function liveGenerateReply(
   options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse> {
   const domain = inferDomain(message, history);
+
+  // Domain-specific requests (food, travel, etc.) go straight to the server-
+  // side tool handler. This avoids relying on the LLM to make tool calls,
+  // which many models (e.g. reasoning models) cannot do reliably.
+  if (domain !== "general" && _demoFallback) {
+    return _demoFallback(message, history, userId, capabilities, options);
+  }
+
   const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live pipeline.");
@@ -178,6 +186,14 @@ async function* liveStreamGenerateReply(
   options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
   const domain = inferDomain(message, history);
+
+  // Domain-specific requests go straight to the server-side tool handler.
+  if (domain !== "general" && _demoFallback) {
+    const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
+    yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
+    return;
+  }
+
   const activeModel = await resolveActiveModel(domain);
   if (!activeModel) {
     throw new Error("No model configured — cannot run live streaming pipeline.");
