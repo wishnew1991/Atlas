@@ -269,9 +269,9 @@ export interface ChatExecution {
 
 // Transform existing chat history to execution context
 export interface ChatToExecutionContext {
-  conversationId: string;
+  conversationId?: string;
   message: string;
   history: Array<{ role: string; text: string }>;
   userId: string;
-  capabilities: string[];
+  capabilities: Record<string, unknown>;
 }

@@ -17,6 +17,7 @@ import {
   type AtlasStreamChunk,
 } from "@/lib/atlas/server/agent/reply";
 import { emitCommittedDomainEffect } from "@/lib/atlas/effects";
+import { runChatExecution, streamChatExecution } from "@/lib/execution/engine";
 
 export { looksLikeToolPayload };
 export type { AtlasStreamChunk };
@@ -26,9 +27,17 @@ export async function createAtlasReply(
   history: AtlasChatHistoryItem[],
   userId: string,
   capabilities: AtlasCapabilities,
-  options?: { conversationId?: string }
+  options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse> {
-  return createAtlasReplyCore(message, history, userId, capabilities, demoResponse, options);
+  const result = await runChatExecution(
+    message,
+    history,
+    userId,
+    capabilities,
+    demoResponse,
+    options
+  );
+  return result;
 }
 
 export async function* streamAtlasReply(
@@ -37,9 +46,17 @@ export async function* streamAtlasReply(
   userId: string,
   capabilities: AtlasCapabilities,
   signal?: AbortSignal,
-  options?: { conversationId?: string }
+  options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  yield* streamAtlasReplyCore(message, history, userId, capabilities, demoResponse, signal, options);
+  yield* streamChatExecution(
+    message,
+    history,
+    userId,
+    capabilities,
+    demoResponse,
+    signal,
+    options
+  );
 }
 
 export async function executeAtlasAction(actionId: string, userId: string) {
@@ -315,7 +332,13 @@ function domainForText(text: string): AtlasActionDomain | null {
   return null;
 }
 
-async function demoResponse(message: string, userId: string): Promise<AtlasChatResponse> {
+async function demoResponse(
+  message: string,
+  _history: AtlasChatHistoryItem[],
+  userId: string,
+  _capabilities: AtlasCapabilities,
+  _options?: { conversationId?: string; executionId?: string }
+): Promise<AtlasChatResponse> {
   if (identityChat.test(message.trim())) {
     return {
       reply:

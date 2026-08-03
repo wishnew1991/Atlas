@@ -9,7 +9,6 @@ import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import type { LlmProvider } from "@/lib/atlas/llm";
 import { toLlmProvider } from "@/lib/atlas/server/provider-map";
 import type { StageEvent } from "@/lib/atlas/observability/trace";
-import { runChatExecution, streamChatExecution } from "@/lib/execution/engine";
 
 export type ActiveModel = {
   id: string;
@@ -60,10 +59,21 @@ export async function createAtlasReplyCore(
   history: AtlasChatHistoryItem[],
   userId: string,
   capabilities: AtlasCapabilities,
-  demoFallback: (message: string, userId: string) => Promise<AtlasChatResponse>,
-  options?: { conversationId?: string }
+  generateReply: (
+    message: string,
+    history: AtlasChatHistoryItem[],
+    userId: string,
+    capabilities: AtlasCapabilities,
+    options?: { conversationId?: string; executionId?: string }
+  ) => Promise<AtlasChatResponse>,
+  options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse & { conversationId?: string; runId?: string; executionId?: string }> {
-  return runChatExecution(message, history, userId, capabilities, demoFallback, options);
+  const response = await generateReply(message, history, userId, capabilities, options);
+  return {
+    ...response,
+    conversationId: options?.conversationId,
+    executionId: options?.executionId,
+  };
 }
 
 export async function* streamAtlasReplyCore(
@@ -71,11 +81,27 @@ export async function* streamAtlasReplyCore(
   history: AtlasChatHistoryItem[],
   userId: string,
   capabilities: AtlasCapabilities,
-  demoFallback: (message: string, userId: string) => Promise<AtlasChatResponse>,
+  generateReply: (
+    message: string,
+    history: AtlasChatHistoryItem[],
+    userId: string,
+    capabilities: AtlasCapabilities,
+    options?: { conversationId?: string; executionId?: string }
+  ) => Promise<AtlasChatResponse>,
   signal?: AbortSignal,
-  options?: { conversationId?: string }
+  options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  yield* streamChatExecution(message, history, userId, capabilities, demoFallback, signal, options);
+  signal?.throwIfAborted();
+
+  const response = await generateReply(message, history, userId, capabilities, options);
+
+  yield {
+    text: response.reply,
+    action: response.action,
+    done: true,
+    conversationId: options?.conversationId,
+    executionId: options?.executionId,
+  };
 }
 
 export { looksLikeToolPayload } from "./tools";

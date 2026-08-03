@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAtlasReply, streamAtlasReply } from "@/lib/atlas/server/atlas-agent";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import type { AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
+import { createExecutionFromChat, getExecutionResponse } from "@/lib/execution/manager";
 
 export const runtime = "nodejs";
 
@@ -49,9 +50,29 @@ export async function POST(request: NextRequest) {
   try {
     const actor = await getAtlasActor();
 
+    // Create execution from chat context (execution-centric transformation)
+    const execution = await createExecutionFromChat({
+      conversationId,
+      message,
+      history,
+      userId: actor.userId,
+      capabilities: actor.capabilities as unknown as Record<string, unknown>,
+    });
+
     if (!wantsStream) {
-      const response = await createAtlasReply(message, history, actor.userId, actor.capabilities, { conversationId });
-      return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
+      const response = await createAtlasReply(message, history, actor.userId, actor.capabilities, {
+        conversationId,
+        executionId: execution.id,
+      });
+
+      // Enhance response with execution metadata
+      const enhancedResponse = {
+        ...response,
+        executionId: execution.id,
+        executionStatus: response.executionStatus ?? execution.status,
+      };
+
+      return NextResponse.json(enhancedResponse, { headers: { "Cache-Control": "no-store" } });
     }
 
     const encoder = new TextEncoder();
@@ -60,14 +81,26 @@ export async function POST(request: NextRequest) {
         const send = (event: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 
         try {
+          // Send execution metadata first
+          send({
+            type: "execution_start",
+            executionId: execution.id,
+            goal: execution.goal,
+            status: execution.status,
+          });
+
           for await (const chunk of streamAtlasReply(
             message,
             history,
             actor.userId,
             actor.capabilities,
             request.signal,
-            { conversationId }
+            { conversationId, executionId: execution.id }
           )) {
+            // Update the executionId in the streamed chunk if the core omitted it.
+            if (chunk.executionId !== execution.id) {
+              chunk.executionId = execution.id;
+            }
             if (chunk.error) {
               send({ type: "error", text: chunk.error });
               continue;
@@ -84,7 +117,7 @@ export async function POST(request: NextRequest) {
                 durationMs: chunk.stage.durationMs,
                 runId: chunk.runId,
                 conversationId: chunk.conversationId,
-                executionId: chunk.executionId,
+                executionId: execution.id,
               });
             }
 
@@ -93,7 +126,7 @@ export async function POST(request: NextRequest) {
                 type: "meta",
                 runId: chunk.runId,
                 conversationId: chunk.conversationId ?? null,
-                executionId: chunk.executionId ?? null,
+                executionId: execution.id,
               });
             }
 
@@ -107,7 +140,7 @@ export async function POST(request: NextRequest) {
                 action: chunk.action ?? null,
                 runId: chunk.runId ?? null,
                 conversationId: chunk.conversationId ?? null,
-                executionId: chunk.executionId ?? null,
+                executionId: execution.id,
               });
             }
           }

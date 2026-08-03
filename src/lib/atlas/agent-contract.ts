@@ -37,6 +37,8 @@ export interface AtlasChatResponse {
   runId?: string;
   /** Additive — execution engine id when the turn created an Execution. */
   executionId?: string;
+  /** Additive — execution engine status when the turn was routed through an Execution. */
+  executionStatus?: string;
 }
 
 export interface AtlasActionResponse {
