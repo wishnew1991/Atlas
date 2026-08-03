@@ -348,7 +348,14 @@ async function demoResponse(
     };
   }
 
-  const domain = domainForText(message);
+  // Check if user is mid-flow in a domain pipeline (e.g. picked an address
+  // in the food flow). Continuation messages like "5", "yes", "that one"
+  // should route back to the active pipeline, not the LLM.
+  const { getFoodSession: getFoodSessionForCheck } = await import("@/lib/atlas/mcp/food-session");
+  const activeFoodSession = getFoodSessionForCheck(userId);
+  const isFoodContinuation = activeFoodSession.step !== "idle";
+
+  const domain = isFoodContinuation ? "food" : domainForText(message);
 
   if (!domain) {
     return {
@@ -361,15 +368,28 @@ async function demoResponse(
 
   if (domain === "food") {
     const { getFoodSession, hydrateFoodSession } = await import("@/lib/atlas/mcp/food-session");
-    const { ensureAddress } = await import("@/lib/atlas/mcp/food-service");
+    const foodService = await import("@/lib/atlas/mcp/food-service");
 
     await hydrateFoodSession(userId);
     const session = getFoodSession(userId);
-    const result = session.address
-      ? await (await import("@/lib/atlas/mcp/food-service")).discoverRestaurants(userId, message)
-      : await ensureAddress(userId);
 
-    return { reply: result.reply, mode: "demo", toolsUsed: ["Swiggy"] };
+    // Route to the right handler based on where the user is in the flow.
+    switch (session.step) {
+      case "idle":
+      case "awaiting_address":
+        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+      case "browsing_restaurants":
+        return { reply: (await foodService.selectRestaurant(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+      case "browsing_menu":
+        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+      case "building_cart":
+        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+      case "awaiting_approval":
+      case "pending_payment":
+        return { reply: (await foodService.checkout(userId)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+      default:
+        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+    }
   }
 
   const result = await routeToolCall(domain, "search", { domain, request: message });

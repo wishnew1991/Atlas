@@ -66,6 +66,11 @@ export type GenerateReply = (
 // to the demo responder when the model cannot call tools.
 let _demoFallback: GenerateReply | null = null;
 
+// Track the active domain pipeline per user. Once a domain flow starts
+// (food, travel, etc.), all follow-up messages route to it until the flow
+// completes (step returns to "idle").
+const _activeDomain = new Map<string, string>();
+
 // ---------------------------------------------------------------------------
 // Live pipeline — runs when a model is configured
 // ---------------------------------------------------------------------------
@@ -77,11 +82,26 @@ async function liveGenerateReply(
   capabilities: AtlasCapabilities,
   options?: { conversationId?: string; executionId?: string }
 ): Promise<AtlasChatResponse> {
-  const domain = inferDomain(message, history);
+  let domain = inferDomain(message, history);
 
-  // Domain-specific requests (food, travel, etc.) go straight to the server-
-  // side tool handler. This avoids relying on the LLM to make tool calls,
-  // which many models (e.g. reasoning models) cannot do reliably.
+  // Lock domain: once a flow starts, keep routing to it until the flow
+  // completes (step returns to "idle"). This ensures "5", "yes", "that one"
+  // during a food flow stay in the food pipeline.
+  const locked = _activeDomain.get(userId);
+  if (locked) {
+    // Check if the locked flow is still active.
+    const { getFoodSession } = await import("@/lib/atlas/mcp/food-session");
+    const session = getFoodSession(userId);
+    if (session.step !== "idle") {
+      domain = locked;
+    } else {
+      _activeDomain.delete(userId);
+    }
+  } else if (domain !== "general") {
+    _activeDomain.set(userId, domain);
+  }
+
+  // Domain-specific requests go straight to the server-side tool handler.
   if (domain !== "general" && _demoFallback) {
     return _demoFallback(message, history, userId, capabilities, options);
   }
@@ -185,7 +205,21 @@ async function* liveStreamGenerateReply(
   signal?: AbortSignal,
   options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  const domain = inferDomain(message, history);
+  let domain = inferDomain(message, history);
+
+  // Lock domain during active flow.
+  const locked = _activeDomain.get(userId);
+  if (locked) {
+    const { getFoodSession } = await import("@/lib/atlas/mcp/food-session");
+    const session = getFoodSession(userId);
+    if (session.step !== "idle") {
+      domain = locked;
+    } else {
+      _activeDomain.delete(userId);
+    }
+  } else if (domain !== "general") {
+    _activeDomain.set(userId, domain);
+  }
 
   // Domain-specific requests go straight to the server-side tool handler.
   if (domain !== "general" && _demoFallback) {
