@@ -17,7 +17,7 @@ import type { AtlasStreamChunk } from "@/lib/atlas/server/agent/reply";
 import { resolveActiveModel } from "@/lib/atlas/server/agent/reply";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { chat, streamChat, type LlmMessage } from "@/lib/atlas/llm";
-import { executeTool, getToolSchemas, type ToolContext } from "@/lib/atlas/tools/registry";
+import { executeTool, getToolsForCapabilities, type ToolContext } from "@/lib/atlas/tools/registry";
 import { historyToLlmMessages } from "@/lib/atlas/conversation/history";
 import { buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
 import {
@@ -27,6 +27,16 @@ import {
 } from "@/lib/atlas/server/agent/tools";
 import { inferDomain } from "@/lib/atlas/domain";
 import type { Execution } from "./types";
+import type { Capability } from "@/lib/atlas/planner/planner";
+
+const DOMAIN_TO_CAPABILITY: Record<string, Capability[]> = {
+  food: ["food"],
+  travel: ["travel"],
+  shopping: ["shopping"],
+  rides: ["rides"],
+  appointments: ["calendar"],
+  general: ["web"],
+};
 import {
   createExecution,
   updateExecutionStatus,
@@ -65,7 +75,8 @@ async function liveGenerateReply(
   const systemPrompt = buildSystemPrompt([]);
   const baseMessages = historyToLlmMessages(systemPrompt, history, message);
 
-  const toolDefs = await getToolSchemas();
+  const caps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
+  const toolDefs = await getToolsForCapabilities(caps);
 
   const toolContext: ToolContext = {
     userId,
@@ -145,7 +156,8 @@ async function* liveStreamGenerateReply(
   const systemPrompt = buildSystemPrompt([]);
   const baseMessages = historyToLlmMessages(systemPrompt, history, message);
 
-  const toolDefs = await getToolSchemas();
+  const streamCaps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
+  const toolDefs = await getToolsForCapabilities(streamCaps);
 
   const toolContext: ToolContext = {
     userId,
