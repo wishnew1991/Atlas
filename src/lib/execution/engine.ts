@@ -214,6 +214,7 @@ async function* liveStreamGenerateReply(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let fullContent = "";
     const streamToolCalls: { id: string; name: string; arguments: string }[] = [];
+    let chunkCount = 0;
     for await (const chunk of streamChat({
       model: activeModel.id,
       messages,
@@ -226,6 +227,7 @@ async function* liveStreamGenerateReply(
       provider: activeModel.provider,
       signal,
     })) {
+      chunkCount++;
       if (chunk.type === "token") {
         fullContent += chunk.text;
         yield { text: chunk.text };
@@ -233,8 +235,39 @@ async function* liveStreamGenerateReply(
         streamToolCalls.push(chunk.call);
       }
     }
-
     if (streamToolCalls.length === 0) {
+      // If the model produced no tokens at all, it may not support streaming
+      // with tools (e.g. some Nemotron models). Retry without tools to get
+      // a text response, or fall back to the demo responder.
+      if (chunkCount <= 1 && fullContent.length === 0 && round === 0) {
+        let fallbackContent = "";
+        for await (const chunk of streamChat({
+          model: activeModel.id,
+          messages,
+          temperature: 0.3,
+          maxTokens: 2048,
+          apiKey: activeModel.apiKey,
+          baseUrl: activeModel.baseUrl,
+          provider: activeModel.provider,
+          signal,
+        })) {
+          if (chunk.type === "token") {
+            fallbackContent += chunk.text;
+            yield { text: chunk.text };
+          }
+        }
+        if (fallbackContent.length > 0) {
+          yield { done: true };
+          return;
+        }
+      }
+      // If the model outputs reasoning instead of tool calls, fall back to
+      // the demo responder which handles domains via server-side orchestration.
+      if (round === 0 && _demoFallback && looksLikeReasoning(fullContent)) {
+        const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
+        yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
+        return;
+      }
       yield { done: true, action: lastAction };
       return;
     }
@@ -354,6 +387,7 @@ export async function* streamChatExecution(
   let pendingAction: AtlasPendingAction | undefined;
 
   try {
+    _demoFallback = generateReply;
     const streamDomain = inferDomain(message, history);
     const hasModel = await resolveActiveModel(streamDomain).catch(() => null);
     const execId = execution.id;
