@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "rm -rf .next .turbo && next dev",
+    "clean": "rm -rf .next .turbo node_modules/.cache",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src --max-warnings=0",
