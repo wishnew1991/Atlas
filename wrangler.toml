@@ -6,4 +6,4 @@ pages_build_output_dir = ".vercel/output/static"
 [[d1_databases]]
 binding = "DB"
 database_name = "atlas-db"
-database_id = "atlas-db-dev"
+database_id = "ff7346b0-3421-4381-b73a-4886b6c23836"
