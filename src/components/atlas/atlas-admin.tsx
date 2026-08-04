@@ -23,6 +23,7 @@ interface ModelConfig {
   baseUrl?: string;
   enabled: boolean;
   credentialId?: string;
+  fallbackModelIds?: string[];
 }
 
 interface RoutingRule {
@@ -63,74 +64,194 @@ const adminNav: ReadonlyArray<{
   },
 ];
 
-const providerMeta: Record<AtlasProvider, { label: string; hint: string }> = {
-  openai: { label: "OpenAI", hint: "platform.openai.com" },
-  anthropic: { label: "Anthropic", hint: "console.anthropic.com" },
-  google: { label: "Google", hint: "ai.google.dev" },
-  nvidia: { label: "NVIDIA", hint: "build.nvidia.com" },
+const providerMeta: Record<AtlasProvider, { label: string; hint: string; baseHint?: string }> = {
+  openai: { label: "OpenAI", hint: "platform.openai.com", baseHint: "https://api.openai.com/v1" },
+  anthropic: { label: "Anthropic", hint: "console.anthropic.com", baseHint: "https://api.anthropic.com/v1" },
+  google: { label: "Google", hint: "ai.google.dev", baseHint: "https://generativelanguage.googleapis.com/v1beta" },
+  nvidia: { label: "NVIDIA", hint: "build.nvidia.com", baseHint: "https://integrate.api.nvidia.com/v1" },
   custom: { label: "Custom", hint: "OpenAI-compatible endpoint" },
 };
+function modelDisplayName(model: ModelConfig, credentials: AtlasCredential[]): string {
+  const cred = credentials.find((c) => c.id === model.credentialId);
+  const prefix = cred ? `[${cred.label || cred.provider}] ` : "";
+  return prefix + (model.label || model.id);
+}
 
-function AddModelForm({
+function RoutingChain({
+  models,
+  credentials,
+  defaultModelId,
+  onSave,
+}: {
+  models: ModelConfig[];
+  credentials: AtlasCredential[];
+  defaultModelId: string;
+  onSave: (defaultId: string, backup1Id: string, backup2Id: string) => void;
+}) {
+  const defaultModel = models.find((m) => m.id === defaultModelId);
+  const fallbackIds = defaultModel?.fallbackModelIds ?? [];
+  const backup1Id = fallbackIds[0] ?? "";
+  const backup2Id = fallbackIds[1] ?? "";
+
+  const [draftDefault, setDraftDefault] = useState(defaultModelId);
+  const [draftBackup1, setDraftBackup1] = useState(backup1Id);
+  const [draftBackup2, setDraftBackup2] = useState(backup2Id);
+
+  const fallbackKey = fallbackIds.join("|");
+
+  useEffect(() => {
+    setDraftDefault(defaultModelId);
+    setDraftBackup1(fallbackIds[0] ?? "");
+    setDraftBackup2(fallbackIds[1] ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultModelId, fallbackKey]);
+
+  const enabledModels = models.filter((m) => m.enabled);
+
+  const handleChange = (
+    newDefault: string,
+    newBackup1: string,
+    newBackup2: string,
+  ) => {
+    setDraftDefault(newDefault);
+    setDraftBackup1(newBackup1);
+    setDraftBackup2(newBackup2);
+    onSave(newDefault, newBackup1, newBackup2);
+  };
+
+  const renderOptions = (excludeId = "") => (
+    <>
+      <option value="">— none —</option>
+      {enabledModels
+        .filter((m) => m.id !== excludeId)
+        .map((m) => (
+          <option key={m.id} value={m.id}>
+            {modelDisplayName(m, credentials)}
+          </option>
+        ))}
+    </>
+  );
+
+  return (
+    <div className="atlas-rchain">
+      <div className="atlas-rchain__fields">
+        <label className="atlas-rchain__field">
+          <span className="atlas-rchain__field-label">Default</span>
+          <select
+            className="atlas-rchain__select"
+            value={draftDefault}
+            onChange={(event) =>
+              handleChange(event.target.value, draftBackup1, draftBackup2)
+            }
+          >
+            {renderOptions()}
+          </select>
+        </label>
+        <label className="atlas-rchain__field">
+          <span className="atlas-rchain__field-label">Backup 1</span>
+          <select
+            className="atlas-rchain__select"
+            value={draftBackup1}
+            onChange={(event) =>
+              handleChange(draftDefault, event.target.value, draftBackup2)
+            }
+          >
+            {renderOptions(draftDefault)}
+          </select>
+        </label>
+        <label className="atlas-rchain__field">
+          <span className="atlas-rchain__field-label">Backup 2</span>
+          <select
+            className="atlas-rchain__select"
+            value={draftBackup2}
+            onChange={(event) =>
+              handleChange(draftDefault, draftBackup1, event.target.value)
+            }
+          >
+            {renderOptions(draftDefault)}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function AddModelInline({
   credential,
-  providerModels,
-  attachedModelIds,
-  error,
+  available,
+  fetchError,
   onAdd,
 }: {
   credential: AtlasCredential;
-  providerModels: string[];
-  attachedModelIds: string[];
-  error: string | null;
+  available: string[];
+  fetchError: string | null;
   onAdd: (modelId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    onAdd(draft);
+    if (!draft.trim()) return;
+    onAdd(draft.trim());
     setDraft("");
+    setOpen(false);
   };
 
-  const attached = new Set(attachedModelIds);
-  const available = providerModels.filter((modelId) => !attached.has(modelId));
+  const selectModel = (modelId: string) => {
+    onAdd(modelId);
+    setOpen(false);
+  };
 
   return (
-    <div className="atlas-provider__add">
-      {available.length > 0 ? (
-        <form className="atlas-provider__add-model" onSubmit={submit}>
-          <select
-            className="atlas-assistant__composer-value"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          >
-            <option value="">Select a model…</option>
-            {available.map((modelId) => (
-              <option key={modelId} value={modelId}>
-                {modelId}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="atlas-action atlas-action--primary" disabled={!draft}>
-            Add
-          </button>
-        </form>
-      ) : (
-        <form className="atlas-provider__add-model" onSubmit={submit}>
-          <input
-            className="atlas-assistant__composer-value"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={`Type a ${credential.provider} model ID`}
-          />
-          <button type="submit" className="atlas-action atlas-action--primary" disabled={!draft.trim()}>
-            Add
-          </button>
-        </form>
-      )}
-      {error ? (
-        <div className="atlas-micro" style={{ color: "var(--amber)" }}>
-          {error}
+    <div className="atlas-add-model-inline">
+      <button
+        type="button"
+        className="atlas-add-model-inline__trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="atlas-add-model-inline__icon">{open ? "−" : "+"}</span>
+        <span>Add model</span>
+      </button>
+      {open ? (
+        <div className="atlas-add-model-inline__popover">
+          {available.length > 0 ? (
+            <div className="atlas-add-model-inline__list">
+              <select
+                className="atlas-add-model-inline__select"
+                onChange={(event) => {
+                  if (event.target.value) selectModel(event.target.value);
+                }}
+                value=""
+              >
+                <option value="">Pick a model…</option>
+                {available.map((modelId) => (
+                  <option key={modelId} value={modelId}>
+                    {modelId}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <form className="atlas-add-model-inline__manual" onSubmit={submit}>
+            <input
+              className="atlas-add-model-inline__input"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={`Type a ${credential.provider} model ID`}
+            />
+            <button
+              type="submit"
+              className="atlas-action atlas-action--primary atlas-action--small"
+              disabled={!draft.trim()}
+            >
+              Add
+            </button>
+          </form>
+          {fetchError ? (
+            <div className="atlas-add-model-inline__error">{fetchError}</div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -142,8 +263,11 @@ export function AtlasAdmin() {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [routing, setRouting] = useState<RoutingRule[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
+  const [embeddingModelId, setEmbeddingModelId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [selectedCredentialId, setSelectedCredentialId] = useState("");
   const [credentials, setCredentials] = useState<AtlasCredential[]>([]);
@@ -207,6 +331,7 @@ export function AtlasAdmin() {
       setModels(payload.models);
       setRouting(payload.routing);
       setDefaultModelId(payload.defaultModelId);
+      setEmbeddingModelId(payload.embeddingModelId ?? "");
       setError(null);
     } catch {
       setError("Could not reach the admin service.");
@@ -216,6 +341,18 @@ export function AtlasAdmin() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!formError) return;
+    const timer = window.setTimeout(() => setFormError(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [formError]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const loadVoice = useCallback(async () => {
     try {
@@ -443,17 +580,21 @@ export function AtlasAdmin() {
   const saveCredential = async (event: React.FormEvent) => {
     event.preventDefault();
     setNotice(null);
+    setFormError(null);
+    setSubmitting(true);
+
+    const label = credentialForm.label.trim() || providerMeta[credentialForm.provider].label;
 
     try {
       const response = await fetch("/api/admin/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentialForm),
+        body: JSON.stringify({ ...credentialForm, label }),
       });
       const payload = await response.json();
 
       if (!response.ok) {
-        setError(payload.error || "Could not save credential.");
+        setFormError(payload.error || "Could not save credential.");
         return;
       }
 
@@ -465,13 +606,14 @@ export function AtlasAdmin() {
           ? "Provider connected. Type a model ID to attach it."
           : "Provider connected. Pick a model from the list to attach it."
       );
-      setError(null);
 
       if (payload.credential.apiKey) {
         void fetchModelsForCredential(payload.credential);
       }
-    } catch {
-      setError("Could not save credential.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not save credential.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -656,6 +798,7 @@ export function AtlasAdmin() {
 
       setModels(payload.models);
       setDefaultModelId(payload.defaultModelId);
+      setEmbeddingModelId(payload.embeddingModelId ?? "");
       setNotice("Model added to provider.");
       setError(null);
     } catch {
@@ -679,15 +822,83 @@ export function AtlasAdmin() {
 
       setModels(payload.models);
       setDefaultModelId(payload.defaultModelId);
+      setEmbeddingModelId(payload.embeddingModelId ?? "");
       setNotice("Model removed.");
     } catch {
       setError("Could not delete model.");
     }
   };
 
-  const setDefault = async (id: string) => {
-    setDefaultModelId(id);
-    await saveRouting({ defaultModelId: id });
+  const saveProviderChain = async (
+    defaultId: string,
+    backup1Id: string,
+    backup2Id: string
+  ) => {
+    setNotice(null);
+    setError(null);
+
+    const fallbacks: string[] = [];
+    if (backup1Id) fallbacks.push(backup1Id);
+    if (backup2Id) fallbacks.push(backup2Id);
+
+    try {
+      // Step 1: save the default model.
+      const defaultResponse = await fetch("/api/admin/models", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setDefault", modelId: defaultId }),
+      });
+      const defaultPayload = await defaultResponse.json();
+
+      if (!defaultResponse.ok) {
+        setError(defaultPayload.error || "Could not set default model.");
+        return;
+      }
+
+      // Step 2: save the fallback models for the default.
+      const fallbackResponse = await fetch("/api/admin/models", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setFallbacks", modelId: defaultId, fallbackModelIds: fallbacks }),
+      });
+      const fallbackPayload = await fallbackResponse.json();
+
+      if (!fallbackResponse.ok) {
+        setError(fallbackPayload.error || "Could not save fallback models.");
+        return;
+      }
+
+      setModels(fallbackPayload.models);
+      setDefaultModelId(fallbackPayload.defaultModelId);
+      setEmbeddingModelId(fallbackPayload.embeddingModelId ?? "");
+      setNotice("Provider chain saved.");
+    } catch {
+      setError("Could not save provider chain.");
+    }
+  };
+
+  const saveEmbeddingModel = async (id: string) => {
+    setNotice(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/admin/models", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setEmbedding", modelId: id }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setError(payload.error || "Could not save embedding model.");
+        return;
+      }
+
+      setEmbeddingModelId(payload.embeddingModelId ?? "");
+      setNotice("Embedding model saved.");
+    } catch {
+      setError("Could not save embedding model.");
+    }
   };
 
   const saveMcpServer = async (event: React.FormEvent) => {
@@ -900,11 +1111,61 @@ export function AtlasAdmin() {
         <div className="atlas-admin-panel">
           <section className="atlas-section">
             <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Models</p>
+              <h2 className="atlas-section__title">Routing chain</h2>
+              <p className="atlas-section__copy">
+                Default model and fallbacks — pulled from all connected providers.
+              </p>
+            </div>
+            <RoutingChain
+              models={models}
+              credentials={credentials}
+              defaultModelId={defaultModelId}
+              onSave={saveProviderChain}
+            />
+          </section>
+
+          <section className="atlas-section">
+            <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Embedding</p>
+              <h2 className="atlas-section__title">Memory embedding model</h2>
+              <p className="atlas-section__copy">
+                Model used to generate embeddings for long-term memory. Memory is
+                disabled when no embedding model is selected.
+              </p>
+            </div>
+            <div className="atlas-rchain">
+              <div className="atlas-rchain__fields">
+                <label className="atlas-rchain__field">
+                  <span className="atlas-rchain__field-label">Embedding model</span>
+                  <select
+                    className="atlas-rchain__select"
+                    value={embeddingModelId}
+                    onChange={(event) => saveEmbeddingModel(event.target.value)}
+                  >
+                    <option value="">None (memory disabled)</option>
+                    {models
+                      .filter((m) => m.enabled && m.provider !== "anthropic")
+                      .map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {modelDisplayName(model, credentials)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            {embeddingModelId && !models.find((m) => m.id === embeddingModelId && m.enabled) ? (
+              <div className="atlas-banner atlas-banner--warn" style={{ marginTop: "0.5rem" }}>
+                The selected embedding model is not enabled. Memory is disabled.
+              </div>
+            ) : null}
+          </section>
+
+          <section className="atlas-section">
+            <div className="atlas-section__header">
               <p className="atlas-section__eyebrow">Providers</p>
               <h2 className="atlas-section__title">Connected providers</h2>
-              <p className="atlas-section__copy">
-                Each provider holds one API key. Models are attached to the provider and share its key.
-              </p>
             </div>
 
             {credentials.length === 0 ? (
@@ -913,91 +1174,66 @@ export function AtlasAdmin() {
                 <div className="atlas-card__body">Add your first provider below to start routing models.</div>
               </div>
             ) : (
-              <div className="atlas-providers">
+              <div className="atlas-prows">
                 {credentials.map((credential) => {
                   const credentialModels = models.filter((model) => model.credentialId === credential.id);
+                  const fetchedModels = providerModelsByCredential[credential.id] ?? [];
+                  const attachedIds = credentialModels.map((m) => m.id);
+                  const available = fetchedModels.filter((id) => !attachedIds.includes(id));
+                  const fetchError = providerModelsError[credential.id] ?? null;
 
                   return (
-                    <div className="atlas-provider" key={credential.id}>
-                      <div className="atlas-provider__head">
-                        <div className="atlas-provider__mark" aria-hidden="true">
+                    <div className="atlas-prow" key={credential.id}>
+                      <div className="atlas-prow__info">
+                        <span className="atlas-prow__icon" aria-hidden="true">
                           {credential.label.slice(0, 1).toUpperCase()}
+                        </span>
+                        <div className="atlas-prow__meta">
+                          <span className="atlas-prow__name">{credential.label}</span>
+                          <span className="atlas-prow__detail">
+                            {providerMeta[credential.provider]?.hint}
+                            {credential.baseUrl && credential.provider !== "custom" ? ` · ${credential.baseUrl}` : ""}
+                          </span>
                         </div>
-                        <div className="atlas-provider__meta">
-                          <div className="atlas-provider__name">
-                            {credential.label}
-                            <span className="atlas-badge atlas-badge--blue">{credential.provider}</span>
-                          </div>
-                          <div className="atlas-provider__detail">
-                            {credential.provider === "custom" && credential.baseUrl
-                              ? credential.baseUrl
-                              : providerMeta[credential.provider]?.hint}
-                            {credential.provider !== "custom" && credential.baseUrl
-                              ? ` · ${credential.baseUrl}`
-                              : ""}
-                          </div>
-                        </div>
+                        <span className="atlas-badge atlas-badge--blue">{credential.provider}</span>
+                      </div>
+
+                      <div className="atlas-prow__models">
+                        <span className="atlas-prow__models-label">Models</span>
+                        {credentialModels.length === 0 ? (
+                          <span className="atlas-prow__models-empty">None</span>
+                        ) : (
+                          <select
+                            className="atlas-prow__select"
+                            value=""
+                            onChange={(event) => {
+                              if (event.target.value) deleteModel(event.target.value);
+                            }}
+                          >
+                            <option value="">{credentialModels.length} attached</option>
+                            {credentialModels.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label || m.id}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="atlas-prow__actions">
+                        <AddModelInline
+                          credential={credential}
+                          available={available}
+                          fetchError={fetchError}
+                          onAdd={(modelId) => { void addModelToCredential(credential.id, modelId); }}
+                        />
                         <button
                           type="button"
-                          className="atlas-inline-action atlas-provider__remove"
+                          className="atlas-inline-action atlas-prow__remove"
                           onClick={() => deleteCredential(credential.id)}
                         >
                           Remove
                         </button>
-                      </div>
-
-                      <div className="atlas-provider__body">
-                        {credentialModels.length === 0 ? (
-                          <div className="atlas-provider__empty">
-                            No models attached yet. Add the first one below.
-                          </div>
-                        ) : (
-                          <div className="atlas-provider__models">
-                            {credentialModels.map((model) => (
-                              <div className="atlas-provider__model" key={model.id}>
-                                <div className="atlas-provider__model-meta">
-                                  <div className="atlas-provider__model-name">
-                                    {model.label || model.id}
-                                    {model.id !== model.label ? (
-                                      <span className="atlas-provider__model-id">{model.id}</span>
-                                    ) : null}
-                                  </div>
-                                  <div className="atlas-provider__model-state">
-                                    {model.enabled ? "Active" : "Disabled"}
-                                  </div>
-                                </div>
-                                <div className="atlas-provider__model-actions">
-                                  {defaultModelId === model.id ? (
-                                    <span className="atlas-badge atlas-badge--green">Default</span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="atlas-inline-action"
-                                      onClick={() => setDefault(model.id)}
-                                    >
-                                      Set default
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="atlas-inline-action"
-                                    onClick={() => deleteModel(model.id)}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <AddModelForm
-                          credential={credential}
-                          providerModels={providerModelsByCredential[credential.id] ?? []}
-                          attachedModelIds={credentialModels.map((model) => model.id)}
-                          error={providerModelsError[credential.id] ?? null}
-                          onAdd={(modelId) => void addModelToCredential(credential.id, modelId)}
-                        />
                       </div>
                     </div>
                   );
@@ -1011,7 +1247,7 @@ export function AtlasAdmin() {
               <p className="atlas-section__eyebrow">Add provider</p>
               <h2 className="atlas-section__title">Connect a provider</h2>
               <p className="atlas-section__copy">
-                Pick a provider, paste its API key, and Atlas will list the models you can attach.
+                Pick a provider and paste your API key. Atlas knows the endpoints.
               </p>
             </div>
 
@@ -1036,28 +1272,18 @@ export function AtlasAdmin() {
                 })}
               </div>
 
-              <label className="atlas-assistant__composer-field">
-                <span className="atlas-assistant__composer-label">Label</span>
-                <input
-                  className="atlas-assistant__composer-value"
-                  value={credentialForm.label}
-                  onChange={(event) => setCredentialForm({ ...credentialForm, label: event.target.value })}
-                  placeholder={providerMeta[credentialForm.provider].label}
-                />
-              </label>
-
-              <label className="atlas-assistant__composer-field">
-                <span className="atlas-assistant__composer-label">
-                  Base URL {credentialForm.provider === "custom" ? "(required)" : "(optional)"}
-                </span>
-                <input
-                  className="atlas-assistant__composer-value"
-                  value={credentialForm.baseUrl}
-                  onChange={(event) => setCredentialForm({ ...credentialForm, baseUrl: event.target.value })}
-                  placeholder="https://your-endpoint/v1"
-                  required={credentialForm.provider === "custom"}
-                />
-              </label>
+              {credentialForm.provider === "custom" ? (
+                <label className="atlas-assistant__composer-field">
+                  <span className="atlas-assistant__composer-label">Base URL</span>
+                  <input
+                    className="atlas-assistant__composer-value"
+                    value={credentialForm.baseUrl}
+                    onChange={(event) => setCredentialForm({ ...credentialForm, baseUrl: event.target.value })}
+                    placeholder="https://your-endpoint/v1"
+                    required
+                  />
+                </label>
+              ) : null}
 
               <label className="atlas-assistant__composer-field">
                 <span className="atlas-assistant__composer-label">API key</span>
@@ -1081,9 +1307,29 @@ export function AtlasAdmin() {
                 </div>
               </label>
 
-              <button type="submit" className="atlas-action atlas-action--primary">
-                Add provider
-              </button>
+              <div className="atlas-form__actions">
+                <button
+                  type="submit"
+                  className="atlas-action atlas-action--primary"
+                  disabled={submitting}
+                >
+                  {submitting ? "Connecting..." : "Connect"}
+                </button>
+                {formError ? (
+                  <div className="atlas-form__error" role="alert">
+                    <span className="atlas-form__error-dot" aria-hidden="true" />
+                    <span>{formError}</span>
+                    <button
+                      type="button"
+                      className="atlas-form__error-dismiss"
+                      onClick={() => setFormError(null)}
+                      aria-label="Dismiss error"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </form>
           </section>
         </div>
