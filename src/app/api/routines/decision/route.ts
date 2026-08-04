@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { routines } from "@/lib/atlas/routines";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
-export const runtime = "nodejs";
 
 /**
  * Handle the user's Yes/No on a naturally-discovered routine suggestion.

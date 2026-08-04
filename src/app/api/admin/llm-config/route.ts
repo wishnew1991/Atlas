@@ -3,7 +3,6 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/atlas/server/prisma";
 
-export const runtime = "nodejs";
 
 // Internal endpoint: returns the active LLM configuration for MCP servers.
 // Only accessible from localhost — used by Browser Use launcher script.

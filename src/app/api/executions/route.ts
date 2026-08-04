@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import { getUserExecutions, listExecutionsByConversation, toPublicExecution } from "@/lib/execution/manager";
 
-export const runtime = "nodejs";
 
 /** GET /api/executions?conversationId=&limit= — list recent executions for a thread or user. */
 export async function GET(request: Request) {

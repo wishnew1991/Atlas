@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { transcribeAudio } from "@/lib/atlas/server/nemo-voice";
 
-export const runtime = "nodejs";
 
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 

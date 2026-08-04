@@ -4,8 +4,8 @@ import { createAtlasReply, streamAtlasReply } from "@/lib/atlas/server/atlas-age
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import type { AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
 import { createExecutionFromChat, getExecutionResponse } from "@/lib/execution/manager";
+import { checkRateLimit } from "@/lib/security/rate-limiter";
 
-export const runtime = "nodejs";
 
 function isHistoryItem(value: unknown): value is AtlasChatHistoryItem {
   if (typeof value !== "object" || value === null) {
@@ -46,6 +46,25 @@ export async function POST(request: NextRequest) {
 
   const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() || undefined : undefined;
   const wantsStream = body.stream === true || request.headers.get("accept")?.includes("text/event-stream");
+
+  const userId = request.cookies.get("atlas-user-id")?.value ?? "anonymous";
+  const { allowed, remaining, resetTime } = checkRateLimit(userId, { windowMs: 60 * 1000, maxRequests: 20 });
+
+  if (!allowed) {
+    const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Try again in ${retryAfter}s.` },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfter),
+          "X-RateLimit-Limit": "20",
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": String(resetTime),
+        },
+      }
+    );
+  }
 
   try {
     const actor = await getAtlasActor();

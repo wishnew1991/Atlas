@@ -125,11 +125,11 @@ export function rateLimitMiddleware(
  */
 export function cleanupRateLimits(): void {
   const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
+  rateLimitStore.forEach((entry, key) => {
     if (entry.resetTime < now) {
       rateLimitStore.delete(key);
     }
-  }
+  });
 }
 
 // Run cleanup every minute

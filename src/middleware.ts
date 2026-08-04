@@ -5,12 +5,11 @@ const clerkConfigured = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
 );
 
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/welcome(.*)"]);
 const isApiRoute = createRouteMatcher(["/api(.*)"]);
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 
-/** Local/dev bypass when Clerk keys are missing — set from the auth screen. */
-const LOCAL_SESSION_COOKIE = "atlas-local-session";
+const USER_ID_COOKIE = "atlas-user-id";
 
 function isConfiguredAdmin(userId: string | null | undefined) {
   if (!userId) return false;
@@ -24,6 +23,13 @@ function isConfiguredAdmin(userId: string | null | undefined) {
 function redirectToSignIn(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = "/sign-in";
+  url.search = "";
+  return NextResponse.redirect(url);
+}
+
+function redirectToWelcome(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/welcome";
   url.search = "";
   return NextResponse.redirect(url);
 }
@@ -67,22 +73,22 @@ export default function middleware(request: NextRequest, event: NextFetchEvent) 
     return clerk(request, event);
   }
 
-  // No Clerk yet — still land on auth. Local continue cookie unlocks the app for development.
   if (isApiRoute(request)) {
     return NextResponse.next();
   }
 
-  const hasLocalSession = request.cookies.get(LOCAL_SESSION_COOKIE)?.value === "1";
-
   if (isPublicRoute(request)) {
-    if (hasLocalSession) {
-      return redirectToApp(request);
-    }
     return NextResponse.next();
   }
 
-  if (!hasLocalSession) {
-    return redirectToSignIn(request);
+  if (isAdminRoute(request)) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
+  const hasSession = Boolean(request.cookies.get(USER_ID_COOKIE)?.value);
+
+  if (!hasSession) {
+    return redirectToWelcome(request);
   }
 
   return NextResponse.next();

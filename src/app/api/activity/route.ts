@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { listAccomplishments } from "@/lib/atlas/activity";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
-export const runtime = "nodejs";
 
 /** GET /api/activity — accomplishments (receipts / order outcomes). */
 export async function GET(request: Request) {

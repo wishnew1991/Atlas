@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { synthesizeSpeech, isPiperAvailable } from "@/lib/atlas/server/piper-tts";
 import { resolveConfiguredTtsTarget } from "@/lib/atlas/server/voice-routing";
 
-export const runtime = "nodejs";
 
 export const maxDuration = 60;
 

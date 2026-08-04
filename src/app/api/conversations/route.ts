@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import { loadLatestConversationSnapshot } from "@/lib/atlas/conversation/persist";
 
-export const runtime = "nodejs";
 
 /** GET /api/conversations?latest=1 — restore the actor's most recent thread. */
 export async function GET(request: Request) {

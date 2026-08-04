@@ -14,7 +14,6 @@ import {
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import type { MemoryType } from "@/lib/atlas/memory/service";
 
-export const runtime = "nodejs";
 
 function profileUserId(actorUserId: string) {
   return actorUserId || "atlas-demo-user";

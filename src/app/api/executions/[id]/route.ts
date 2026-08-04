@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import { getExecution, toPublicExecution } from "@/lib/execution/manager";
 
-export const runtime = "nodejs";
 
 /** GET /api/executions/:id — public execution snapshot. */
 export async function GET(

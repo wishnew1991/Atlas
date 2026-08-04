@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 import { loadConversationSnapshot } from "@/lib/atlas/conversation/persist";
 
-export const runtime = "nodejs";
 
 /** GET /api/conversations/:id — restore a specific thread the actor owns. */
 export async function GET(

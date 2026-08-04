@@ -252,6 +252,7 @@ export const memoryService = {
       apiKey: model.apiKey,
       baseUrl: model.baseUrl || mapped.baseUrl,
       provider: mapped.provider,
+      inputType: "passage",
     });
 
     const vector = embeddings[0];
@@ -347,6 +348,7 @@ export const memoryService = {
           apiKey: model.apiKey,
           baseUrl: model.baseUrl || mapped.baseUrl,
           provider: mapped.provider,
+          inputType: "passage",
         });
         if (embeddings[0]) embedding = JSON.stringify(embeddings[0]);
       }
@@ -406,6 +408,7 @@ export const memoryService = {
       apiKey: model.apiKey,
       baseUrl: model.baseUrl || mapped.baseUrl,
       provider: mapped.provider,
+      inputType: "query",
     });
 
     const queryVector = embeddings[0];

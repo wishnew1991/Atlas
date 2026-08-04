@@ -213,16 +213,22 @@ export const openAiAdapter: LlmAdapter = {
   async embed(options: LlmEmbedOptions): Promise<LlmEmbedResult> {
     const baseUrl = options.baseUrl || DEFAULT_BASE_URLS[options.provider] || "https://api.openai.com/v1";
 
+    const body: Record<string, unknown> = {
+      model: options.model,
+      input: options.input,
+    };
+
+    if (options.inputType) {
+      body.input_type = options.inputType;
+    }
+
     const response = await fetch(`${baseUrl}/embeddings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${options.apiKey}`,
       },
-      body: JSON.stringify({
-        model: options.model,
-        input: options.input,
-      }),
+      body: JSON.stringify(body),
       cache: "no-store",
     });
 

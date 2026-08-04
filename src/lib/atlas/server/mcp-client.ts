@@ -1,8 +1,5 @@
 import "server-only";
 
-import { spawn, type ChildProcessByStdio } from "child_process";
-import type { Writable, Readable } from "stream";
-
 export interface McpToolDefinition {
   name: string;
   description: string;
@@ -78,133 +75,6 @@ export interface McpTransport {
   listTools(): Promise<McpToolDefinition[]>;
   callTool(name: string, argumentsValue: Record<string, unknown>): Promise<{ message: string; data: unknown }>;
   close(): void;
-}
-
-class StdioTransport implements McpTransport {
-  private child: ChildProcessByStdio<Writable, Readable, null>;
-  private buffer = "";
-  private nextId = 1;
-  private pending = new Map<number, { resolve: (value: JsonRpcResponse) => void; reject: (reason: Error) => void }>();
-
-  constructor(config: McpServerConfig) {
-    const command = config.command ?? "";
-    const args = config.args ?? [];
-
-    this.child = spawn(command, args, {
-      env: { ...process.env, ...(config.env ?? {}) },
-      stdio: ["pipe", "pipe", "inherit"],
-    });
-
-    this.child.stdout.on("data", (chunk: Buffer) => this.onData(chunk.toString()));
-    this.child.on("exit", (code) => {
-      const entries = Array.from(this.pending.values());
-      for (const { reject } of entries) {
-        reject(new Error(`MCP server exited unexpectedly (code ${code}).`));
-      }
-      this.pending.clear();
-    });
-  }
-
-  private onData(chunk: string) {
-    this.buffer += chunk;
-    let index = this.buffer.indexOf("\n");
-
-    while (index !== -1) {
-      const line = this.buffer.slice(0, index).trim();
-      this.buffer = this.buffer.slice(index + 1);
-
-      if (line.length > 0) {
-        try {
-          const message = JSON.parse(line) as JsonRpcResponse;
-
-          if (isRecord(message) && message.jsonrpc === "2.0" && typeof message.id === "number") {
-            const entry = this.pending.get(message.id);
-            if (entry) {
-              this.pending.delete(message.id);
-              entry.resolve(message);
-            }
-          }
-        } catch {
-          /* ignore non-JSON lines such as server logs */
-        }
-      }
-
-      index = this.buffer.indexOf("\n");
-    }
-  }
-
-  private send(method: string, params?: unknown): Promise<JsonRpcResponse> {
-    const isNotification = method.startsWith("notifications/");
-
-    if (isNotification) {
-      // MCP notifications must not carry an id — some servers reject any request
-      // with an id whose method is not a valid request method (e.g. heventure).
-      const payload: { jsonrpc: "2.0"; method: string; params?: unknown } = {
-        jsonrpc: "2.0",
-        method,
-        params,
-      };
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
-      return Promise.resolve({ jsonrpc: "2.0", id: 0 });
-    }
-
-    const id = this.nextId++;
-    const payload: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
-
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
-      setTimeout(() => {
-        if (this.pending.has(id)) {
-          this.pending.delete(id);
-          reject(new Error(`MCP request "${method}" timed out.`));
-        }
-      }, 20000);
-    });
-  }
-
-  async initialize(): Promise<void> {
-    const response = await this.send("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: { tools: {} },
-      clientInfo: { name: "atlas", version: "0.1.0" },
-    });
-
-    if (response.error) {
-      throw new Error(`MCP initialize failed: ${response.error.message}`);
-    }
-
-    await this.send("notifications/initialized");
-  }
-
-  async listTools(): Promise<McpToolDefinition[]> {
-    const response = await this.send("tools/list", {});
-
-    if (response.error) {
-      throw new Error(`MCP tools/list failed: ${response.error.message}`);
-    }
-
-    return normalizeTools(response.result);
-  }
-
-  async callTool(name: string, argumentsValue: Record<string, unknown>): Promise<{ message: string; data: unknown }> {
-    const response = await this.send("tools/call", { name, arguments: argumentsValue });
-
-    if (response.error) {
-      throw new Error(`MCP tool "${name}" failed: ${response.error.message}`);
-    }
-
-    return normalizeToolResult(response.result);
-  }
-
-  close(): void {
-    try {
-      this.child.stdin.end();
-      this.child.kill("SIGTERM");
-    } catch {
-      /* already closed */
-    }
-  }
 }
 
 class HttpTransport implements McpTransport {
@@ -380,11 +250,7 @@ export function createMcpTransport(config: McpServerConfig): McpTransport {
     return new HttpTransport(config);
   }
 
-  if (config.command) {
-    return new StdioTransport(config);
-  }
-
-  throw new Error("An MCP server requires either a URL or a command.");
+  throw new Error("MCP server requires a URL. Command-based (stdio) servers are not supported on Cloudflare Workers.");
 }
 
 export async function withMcpServer<T>(

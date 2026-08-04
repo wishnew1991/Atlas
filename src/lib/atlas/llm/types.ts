@@ -52,6 +52,7 @@ export interface LlmEmbedOptions {
   apiKey: string;
   baseUrl?: string;
   provider: LlmProvider;
+  inputType?: "query" | "passage";
 }
 
 export interface LlmEmbedResult {

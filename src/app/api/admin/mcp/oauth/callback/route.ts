@@ -10,7 +10,6 @@ import {
   getClientId,
 } from "@/lib/atlas/server/mcp-oauth";
 
-export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {

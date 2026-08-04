@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { finalizeFoodUpi } from "@/lib/atlas/server/atlas-agent";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   let payload: unknown;
