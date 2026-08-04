@@ -1,7 +1,7 @@
 import type { AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
 
 const DOMAIN_KEYWORDS: { domain: string; pattern: RegExp }[] = [
-  { domain: "food", pattern: /\b(food|restaurant|biryani|dinner|lunch|breakfast|swiggy|zomato|deliver|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving|order\s+(food|from))\b/i },
+  { domain: "food", pattern: /\b(food|restaurant|biryani|biriyani|dinner|lunch|breakfast|swiggy|zomato|deliver|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving|order\s+(food|from))\b/i },
   { domain: "travel", pattern: /\b(flight|flights|hotel|hotels|trip|trips|travel|vacation|itinerary|airbnb|airline)\b/i },
   { domain: "rides", pattern: /\b(ride|rides|uber|ola|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop)\b/i },
   { domain: "appointments", pattern: /\b(appointment|doctor|salon|spa|meeting|book\s+a\s+(slot|appointment)|dentist|consultation)\b/i },

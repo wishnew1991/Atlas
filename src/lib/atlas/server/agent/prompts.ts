@@ -91,6 +91,7 @@ export function buildSystemPrompt(
   options?: {
     memoryMode?: PromptMemoryMode;
     recommendationBriefing?: string;
+    flowGuide?: string;
   }
 ): string {
   let prompt = BASE_SYSTEM_PROMPT;
@@ -141,6 +142,11 @@ ${memories.map((m) => `- ${m}`).join("\n")}
 ## Current Session
 ${sessionContext}`;
   }
+
+  if (options?.flowGuide) {
+    prompt += `\n\n---\n\n${options.flowGuide}`;
+  }
+
   return prompt;
 }
 

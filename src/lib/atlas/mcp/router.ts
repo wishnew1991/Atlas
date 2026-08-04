@@ -82,6 +82,10 @@ async function callWithRetry(
 /**
  * Routes an LLM tool call to the best matching MCP server/tool and executes it.
  * Tries every candidate server (global + domain) until one succeeds.
+ *
+ * Provider-aware: when a provider is selected for this domain, only servers
+ * matching that provider are tried. This keeps provider context at the routing
+ * layer without threading it through service functions.
  */
 export async function routeToolCall(
   domain: string,
@@ -89,10 +93,24 @@ export async function routeToolCall(
   args: Record<string, unknown>,
   requestedToolName?: string
 ): Promise<McpCallResult | null> {
-  const servers = await getServersForDomain(domain);
+  let servers = await getServersForDomain(domain);
 
   if (servers.length === 0) {
     return null;
+  }
+
+  // Provider-aware filtering: narrow to the selected provider's server(s).
+  const { getSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
+  const { serverMatchesProviderFilter } = await import("@/lib/atlas/flows/registry");
+  const selectedProvider = getSelectedProvider(domain);
+
+  if (selectedProvider) {
+    servers = servers.filter((s) => serverMatchesProviderFilter(s, selectedProvider));
+    // If filtering removed all servers, fall back to the full list.
+    // This prevents a broken provider state from killing all tool calls.
+    if (servers.length === 0) {
+      servers = await getServersForDomain(domain);
+    }
   }
 
   const errors: string[] = [];

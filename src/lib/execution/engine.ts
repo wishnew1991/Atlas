@@ -14,7 +14,7 @@ import type {
 } from "@/lib/atlas/agent-contract";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import type { AtlasStreamChunk } from "@/lib/atlas/server/agent/reply";
-import { resolveActiveModel } from "@/lib/atlas/server/agent/reply";
+import { resolveActiveModel, resolveModelChain, type ModelChain, type ActiveModel } from "@/lib/atlas/server/agent/reply";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { chat, streamChat, type LlmMessage } from "@/lib/atlas/llm";
 import { executeTool, getToolsForCapabilities, type ToolContext } from "@/lib/atlas/tools/registry";
@@ -22,8 +22,10 @@ import { historyToLlmMessages } from "@/lib/atlas/conversation/history";
 import { buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
 import {
   buildFollowUpMessages,
+  looksLikeToolPayload,
   resolveToolCalls,
   sanitizeAssistantText,
+  summarizeToolTurn,
 } from "@/lib/atlas/server/agent/tools";
 import { inferDomain } from "@/lib/atlas/domain";
 import type { Execution } from "./types";
@@ -44,6 +46,10 @@ import {
   updateExecutionState,
   getExecution,
 } from "./manager";
+
+export function clearActiveDomain(userId: string): void {
+  _activeDomain.delete(userId);
+}
 
 const MAX_TOOL_ROUNDS = 5;
 
@@ -101,20 +107,52 @@ async function liveGenerateReply(
     _activeDomain.set(userId, domain);
   }
 
-  // Domain-specific requests go straight to the server-side tool handler.
-  if (domain !== "general" && _demoFallback) {
-    return _demoFallback(message, history, userId, capabilities, options);
+  // Provider selection: if multiple providers exist for this domain and none
+  // is selected, return a provider selection required response. The UI prompts
+  // the user to choose; provider selection is application state, not LLM reasoning.
+  if (domain !== "general") {
+    const { getProvidersForDomain } = await import("@/lib/atlas/flows/registry");
+    const { getSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
+    const providers = await getProvidersForDomain(domain);
+    const selected = getSelectedProvider(domain);
+
+    if (providers.length > 1 && !selected) {
+      // Return a response that the UI can interpret as provider selection required.
+      // The reply text is a placeholder; the UI checks for the providerSelectionRequired flag.
+      return {
+        reply: "",
+        mode: "live",
+        toolsUsed: [],
+        providerSelectionRequired: true,
+        providers: providers.map((p) => ({ id: p.id, name: p.name })),
+        domain,
+      } as AtlasChatResponse;
+    }
   }
 
-  const activeModel = await resolveActiveModel(domain);
-  if (!activeModel) {
+  // Domain-specific requests: let the LLM handle them with flow guides.
+  // Only fall back to demo when no model is configured (checked below).
+
+  const modelChain = await resolveModelChain(domain);
+  if (!modelChain) {
+    // No model available — use demo fallback for domain-specific requests.
+    if (domain !== "general" && _demoFallback) {
+      return _demoFallback(message, history, userId, capabilities, options);
+    }
     throw new Error("No model configured — cannot run live pipeline.");
   }
+
+  let activeModel = modelChain.primary.model;
+  let fallbackIndex = 0;
 
   const caps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
   const toolDefs = await getToolsForCapabilities(caps);
 
-  let systemPrompt = buildSystemPrompt([]);
+  // Load and inject flow guide for the detected domain.
+  const { resolveFlowGuide } = await import("@/lib/atlas/flows/loader");
+  const flowGuide = await resolveFlowGuide(domain);
+
+  let systemPrompt = buildSystemPrompt([], undefined, { flowGuide });
   if (toolDefs.length > 0) {
     const foodToolNames = toolDefs.filter((t) => t.name.startsWith("food_")).map((t) => t.name).join(", ");
     const otherToolNames = toolDefs.filter((t) => !t.name.startsWith("food_")).map((t) => t.name).join(", ");
@@ -140,24 +178,37 @@ async function liveGenerateReply(
   let lastAction: AtlasPendingAction | undefined;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const result = await chat({
-      model: activeModel.id,
-      messages,
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-      toolChoice: "auto",
-      temperature: 0.3,
-      maxTokens: 2048,
-      apiKey: activeModel.apiKey,
-      baseUrl: activeModel.baseUrl,
-      provider: activeModel.provider,
-    });
+    let result;
+    try {
+      result = await chat({
+        model: activeModel.id,
+        messages,
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        toolChoice: "auto",
+        temperature: 0.3,
+        maxTokens: 2048,
+        apiKey: activeModel.apiKey,
+        baseUrl: activeModel.baseUrl,
+        provider: activeModel.provider,
+      });
+    } catch (error) {
+      // Primary or current fallback failed — try the next fallback model.
+      if (fallbackIndex < modelChain.fallbacks.length) {
+        activeModel = modelChain.fallbacks[fallbackIndex].model;
+        fallbackIndex++;
+        // Retry the same round with the fallback model.
+        round--;
+        continue;
+      }
+      throw error;
+    }
 
     const toolCalls = resolveToolCalls(result);
     if (toolCalls.length === 0) {
-      // If the model outputs reasoning instead of tool calls on the first
-      // round, it likely doesn't support function calling. Fall back to the
-      // demo responder which handles domains via server-side orchestration.
-      if (round === 0 && _demoFallback && looksLikeReasoning(result.content)) {
+      // If the model outputs a raw tool payload as text (JSON instead of
+      // native tool calls), fall back to the demo responder which handles
+      // domains via server-side orchestration.
+      if (round === 0 && _demoFallback && (looksLikeReasoning(result.content) || looksLikeToolPayload(result.content))) {
         return await _demoFallback(message, history, userId, capabilities, options);
       }
       const reply = sanitizeAssistantText(result.content);
@@ -221,22 +272,53 @@ async function* liveStreamGenerateReply(
     _activeDomain.set(userId, domain);
   }
 
-  // Domain-specific requests go straight to the server-side tool handler.
-  if (domain !== "general" && _demoFallback) {
-    const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
-    yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
-    return;
+  // Provider selection: if multiple providers exist for this domain and none
+  // is selected, return a provider selection required response.
+  if (domain !== "general") {
+    const { getProvidersForDomain } = await import("@/lib/atlas/flows/registry");
+    const { getSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
+    const providers = await getProvidersForDomain(domain);
+    const selected = getSelectedProvider(domain);
+
+    if (providers.length > 1 && !selected) {
+      // Yield a chunk that the UI can interpret as provider selection required.
+      yield {
+        text: "",
+        done: true,
+        action: undefined,
+        providerSelectionRequired: true,
+        providers: providers.map((p) => ({ id: p.id, name: p.name })),
+        domain,
+      } as AtlasStreamChunk;
+      return;
+    }
   }
 
-  const activeModel = await resolveActiveModel(domain);
-  if (!activeModel) {
+  // Domain-specific requests: let the LLM handle them with flow guides.
+  // Only fall back to demo when no model is configured (checked below).
+
+  const modelChain = await resolveModelChain(domain);
+  if (!modelChain) {
+    // No model available — use demo fallback for domain-specific requests.
+    if (domain !== "general" && _demoFallback) {
+      const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
+      yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
+      return;
+    }
     throw new Error("No model configured — cannot run live streaming pipeline.");
   }
+
+  let activeModel = modelChain.primary.model;
+  let fallbackIndex = 0;
 
   const streamCaps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
   const toolDefs = await getToolsForCapabilities(streamCaps);
 
-  let systemPrompt = buildSystemPrompt([]);
+  // Load and inject flow guide for the detected domain.
+  const { resolveFlowGuide } = await import("@/lib/atlas/flows/loader");
+  const flowGuide = await resolveFlowGuide(domain);
+
+  let systemPrompt = buildSystemPrompt([], undefined, { flowGuide });
   if (toolDefs.length > 0) {
     const foodToolNames = toolDefs.filter((t) => t.name.startsWith("food_")).map((t) => t.name).join(", ");
     const otherToolNames = toolDefs.filter((t) => !t.name.startsWith("food_")).map((t) => t.name).join(", ");
@@ -265,25 +347,48 @@ async function* liveStreamGenerateReply(
     let fullContent = "";
     const streamToolCalls: { id: string; name: string; arguments: string }[] = [];
     let chunkCount = 0;
-    for await (const chunk of streamChat({
-      model: activeModel.id,
-      messages,
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-      toolChoice: "auto",
-      temperature: 0.3,
-      maxTokens: 2048,
-      apiKey: activeModel.apiKey,
-      baseUrl: activeModel.baseUrl,
-      provider: activeModel.provider,
-      signal,
-    })) {
-      chunkCount++;
-      if (chunk.type === "token") {
-        fullContent += chunk.text;
-        yield { text: chunk.text };
-      } else if (chunk.type === "tool_call") {
-        streamToolCalls.push(chunk.call);
+    let suppressed = false;
+    let streamError: Error | null = null;
+    try {
+      for await (const chunk of streamChat({
+        model: activeModel.id,
+        messages,
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        toolChoice: "auto",
+        temperature: 0.3,
+        maxTokens: 2048,
+        apiKey: activeModel.apiKey,
+        baseUrl: activeModel.baseUrl,
+        provider: activeModel.provider,
+        signal,
+      })) {
+        chunkCount++;
+        if (chunk.type === "token") {
+          fullContent += chunk.text;
+          // Suppress tool payload tokens — if the model is emitting raw JSON
+          // tool calls as text, do not stream those tokens to the client.
+          if (!suppressed && !looksLikeToolPayload(fullContent)) {
+            yield { text: chunk.text };
+          } else {
+            suppressed = true;
+          }
+        } else if (chunk.type === "tool_call") {
+          streamToolCalls.push(chunk.call);
+        }
       }
+    } catch (error) {
+      streamError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    // If the current model failed and we have fallbacks, try the next one.
+    if (streamError) {
+      if (fallbackIndex < modelChain.fallbacks.length) {
+        activeModel = modelChain.fallbacks[fallbackIndex].model;
+        fallbackIndex++;
+        round--;
+        continue;
+      }
+      throw streamError;
     }
     if (streamToolCalls.length === 0) {
       // If the model produced no tokens at all, it may not support streaming
@@ -311,9 +416,10 @@ async function* liveStreamGenerateReply(
           return;
         }
       }
-      // If the model outputs reasoning instead of tool calls, fall back to
-      // the demo responder which handles domains via server-side orchestration.
-      if (round === 0 && _demoFallback && looksLikeReasoning(fullContent)) {
+      // If the model outputs reasoning or a raw tool payload instead of tool
+      // calls, fall back to the demo responder which handles domains via
+      // server-side orchestration.
+      if (round === 0 && _demoFallback && (looksLikeReasoning(fullContent) || looksLikeToolPayload(fullContent))) {
         const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
         yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
         return;

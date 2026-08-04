@@ -50,6 +50,20 @@ export async function POST(request: NextRequest) {
   try {
     const actor = await getAtlasActor();
 
+    // Reset domain sessions only when the conversation changes (new chat).
+    // Track last conversationId per user; clear food session on change.
+    const { resetFoodSession, getLastConversationId, setLastConversationId } = await import("@/lib/atlas/mcp/food-session");
+    const lastConvo = getLastConversationId(actor.userId);
+    if (conversationId && conversationId !== lastConvo) {
+      resetFoodSession(actor.userId);
+      // Also clear the active domain lock in the engine.
+      const { clearActiveDomain } = await import("@/lib/execution/engine");
+      clearActiveDomain(actor.userId);
+    }
+    if (conversationId) {
+      setLastConversationId(actor.userId, conversationId);
+    }
+
     // Create execution from chat context (execution-centric transformation)
     const execution = await createExecutionFromChat({
       conversationId,

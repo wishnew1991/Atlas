@@ -13,6 +13,7 @@ export interface AtlasModelConfig {
   baseUrl?: string;
   enabled: boolean;
   credentialId?: string;
+  fallbackModelIds?: string[];
 }
 
 export interface AtlasCredential {
@@ -97,6 +98,7 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
       baseUrl: model.credential.baseUrl ?? undefined,
       enabled: model.enabled,
       credentialId: model.credentialId,
+      fallbackModelIds: parseFallbackModelIds(model.fallbackModelIds),
     })),
     routing: routing.map((rule) => ({ domain: rule.domain as AtlasActionDomain, modelId: rule.modelId })),
     defaultModelId: defaultModel?.id ?? models[0]?.id ?? "",
@@ -113,6 +115,19 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
     },
     domains: domains.map((domain) => domain.slug),
   };
+}
+
+function parseFallbackModelIds(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is string => typeof entry === "string");
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export async function writeRegistry(_registry: AtlasModelRegistry): Promise<void> {
@@ -290,6 +305,83 @@ export async function deleteModel(id: string): Promise<void> {
 export async function setDefaultModel(id: string): Promise<void> {
   await prisma.modelConfig.updateMany({ data: { isDefault: false } });
   await prisma.modelConfig.updateMany({ where: { id }, data: { isDefault: true } });
+}
+
+export async function setFallbackModels(modelId: string, fallbackIds: string[]): Promise<void> {
+  const clean = Array.from(new Set(fallbackIds.filter((id) => id !== modelId)));
+  await prisma.modelConfig.update({
+    where: { id: modelId },
+    data: { fallbackModelIds: JSON.stringify(clean) },
+  });
+}
+
+export interface ModelResolutionResult {
+  primary: AtlasModelConfig | null;
+  fallbacks: AtlasModelConfig[];
+}
+
+/**
+ * Resolve a model for a domain, including its fallback chain.
+ * The primary model is the one configured for the domain (or default).
+ * The fallbacks are the primary's configured fallback models, filtered to
+ * enabled models that exist in the registry.
+ */
+export async function resolveModelWithFallbacks(
+  domain: AtlasActionDomain
+): Promise<ModelResolutionResult> {
+  const registry = await readRegistry();
+  const rule = registry.routing.find((entry) => entry.domain === domain);
+  const modelId = rule?.modelId || registry.defaultModelId;
+  const primary = registry.models.find((entry) => entry.id === modelId);
+
+  if (!primary || !primary.enabled) {
+    return { primary: null, fallbacks: [] };
+  }
+
+  const allModelsById = new Map(registry.models.map((m) => [m.id, m]));
+  const fallbacks: AtlasModelConfig[] = [];
+  const seen = new Set<string>([primary.id]);
+
+  for (const fallbackId of primary.fallbackModelIds ?? []) {
+    if (seen.has(fallbackId)) continue;
+    const fallback = allModelsById.get(fallbackId);
+    if (fallback && fallback.enabled) {
+      fallbacks.push(fallback);
+      seen.add(fallbackId);
+    }
+  }
+
+  return { primary, fallbacks };
+}
+
+/**
+ * Resolve a model by id, including its fallback chain.
+ * Used for non-domain-specific model resolution.
+ */
+export async function resolveModelByIdWithFallbacks(
+  modelId: string
+): Promise<ModelResolutionResult> {
+  const registry = await readRegistry();
+  const primary = registry.models.find((entry) => entry.id === modelId);
+
+  if (!primary || !primary.enabled) {
+    return { primary: null, fallbacks: [] };
+  }
+
+  const allModelsById = new Map(registry.models.map((m) => [m.id, m]));
+  const fallbacks: AtlasModelConfig[] = [];
+  const seen = new Set<string>([primary.id]);
+
+  for (const fallbackId of primary.fallbackModelIds ?? []) {
+    if (seen.has(fallbackId)) continue;
+    const fallback = allModelsById.get(fallbackId);
+    if (fallback && fallback.enabled) {
+      fallbacks.push(fallback);
+      seen.add(fallbackId);
+    }
+  }
+
+  return { primary, fallbacks };
 }
 
 export async function upsertRouting(domain: string, modelId: string): Promise<void> {

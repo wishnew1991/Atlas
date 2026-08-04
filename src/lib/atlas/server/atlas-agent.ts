@@ -369,26 +369,28 @@ async function demoResponse(
   if (domain === "food") {
     const { getFoodSession, hydrateFoodSession } = await import("@/lib/atlas/mcp/food-session");
     const foodService = await import("@/lib/atlas/mcp/food-service");
+    const { getSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
 
     await hydrateFoodSession(userId);
     const session = getFoodSession(userId);
+    const providerName = getSelectedProvider(domain) ?? "MCP";
 
     // Route to the right handler based on where the user is in the flow.
     switch (session.step) {
       case "idle":
       case "awaiting_address":
-        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: [providerName] };
       case "browsing_restaurants":
-        return { reply: (await foodService.selectRestaurant(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.selectRestaurant(userId, message)).reply, mode: "demo", toolsUsed: [providerName] };
       case "browsing_menu":
-        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: [providerName] };
       case "building_cart":
-        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.updateCart(userId, message)).reply, mode: "demo", toolsUsed: [providerName] };
       case "awaiting_approval":
       case "pending_payment":
-        return { reply: (await foodService.checkout(userId)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.checkout(userId)).reply, mode: "demo", toolsUsed: [providerName] };
       default:
-        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: ["Swiggy"] };
+        return { reply: (await foodService.ensureAddress(userId, message)).reply, mode: "demo", toolsUsed: [providerName] };
     }
   }
 

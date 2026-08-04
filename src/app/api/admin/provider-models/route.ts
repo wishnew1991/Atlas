@@ -13,6 +13,18 @@ const defaultBaseUrls: Record<string, string> = {
   anthropic: "https://api.anthropic.com/v1",
 };
 
+/**
+ * Normalize a provider base URL: strip trailing slashes and any path
+ * beyond the version segment (e.g. "/models" or "/audio/transcriptions").
+ * The caller will append "/models" to fetch the model list.
+ */
+function normalizeBaseUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  // Strip a trailing "/models" so the caller can append it cleanly.
+  return trimmed.replace(/\/models$/, "");
+}
+
 export async function POST(request: Request) {
   try {
     await requireAtlasAdmin();
@@ -34,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "provider and apiKey are required." }, { status: 400 });
   }
 
-  const resolvedBase = baseUrl || defaultBaseUrls[provider] || "";
+  const resolvedBase = normalizeBaseUrl(baseUrl || defaultBaseUrls[provider] || "");
 
   if (!resolvedBase) {
     return NextResponse.json({ models: [], note: "Provider has no discoverable model list." });
@@ -52,7 +64,10 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       return NextResponse.json(
-        { models: [], error: `Provider returned ${response.status}. Enter the model ID manually.` },
+        {
+          models: [],
+          error: `Provider returned ${response.status} for ${resolvedBase}/models. Check the base URL and API key. Enter the model ID manually.`,
+        },
         { status: 200 }
       );
     }
@@ -70,7 +85,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ models });
   } catch {
-    return NextResponse.json({ models: [], error: "Could not reach the provider. Enter the model ID manually." }, { status: 200 });
+    return NextResponse.json(
+      { models: [], error: `Could not reach ${resolvedBase}/models. Check the base URL and API key. Enter the model ID manually.` },
+      { status: 200 }
+    );
   } finally {
     clearTimeout(timeout);
   }

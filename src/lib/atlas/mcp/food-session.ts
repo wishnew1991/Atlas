@@ -214,6 +214,21 @@ export async function hydrateFoodSession(userId: string): Promise<FoodSession> {
   }
 }
 
+export function resetFoodSession(userId: string): void {
+  sessions.delete(userId);
+  deletePersistedAsync(userId);
+}
+
+const lastConversationIds = new Map<string, string>();
+
+export function getLastConversationId(userId: string): string | undefined {
+  return lastConversationIds.get(userId);
+}
+
+export function setLastConversationId(userId: string, conversationId: string): void {
+  lastConversationIds.set(userId, conversationId);
+}
+
 export function getFoodSession(userId: string): FoodSession {
   const existing = sessions.get(userId);
 
