@@ -4,6 +4,8 @@ import { AssistantHome } from "@/components/atlas/assistant-home";
 import { getAtlasActor } from "@/lib/atlas/server/auth";
 import { prisma } from "@/lib/atlas/server/prisma";
 
+export const dynamic = "force-dynamic";
+
 export default async function AtlasHomePage() {
   const actor = await getAtlasActor();
   const profile = await prisma.userProfile.findUnique({ where: { userId: actor.userId } });

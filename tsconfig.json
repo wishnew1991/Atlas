@@ -30,6 +30,10 @@
     "src/lib/queue/dead-letter.ts",
     "src/lib/queue/scheduler.ts",
     "src/lib/security",
-    "src/app/api/queue"
+    "src/app/api/queue",
+    "scripts/add-google-key.ts",
+    "scripts/autonomous-audit.ts",
+    "scripts/create-admin.ts",
+    "scripts/retrace-audit.ts"
   ]
 }

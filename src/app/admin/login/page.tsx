@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminLoginScreen } from "@/components/atlas/admin-login-screen";
 import { getAtlasActor, isAtlasAdminActor } from "@/lib/atlas/server/auth";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Admin login | Atlas",
 };
