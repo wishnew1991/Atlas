@@ -13,14 +13,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export async function GET() {
+function maskApiKey(apiKey: string): string {
+  if (apiKey.length <= 10) return "••••";
+  return `${apiKey.slice(0, 4)}…${apiKey.slice(-4)}`;
+}
+
+/** GET /api/admin/credentials?reveal=1 — masked keys by default; full keys only when explicitly requested. */
+export async function GET(request: Request) {
   try {
     await requireAtlasAdmin();
   } catch {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  return NextResponse.json({ credentials: await listCredentials() });
+  const url = new URL(request.url);
+  const reveal = url.searchParams.get("reveal") === "1";
+  const credentials = await listCredentials();
+
+  return NextResponse.json({
+    credentials: reveal
+      ? credentials
+      : credentials.map((credential) => ({
+          ...credential,
+          apiKey: maskApiKey(credential.apiKey),
+        })),
+  });
 }
 
 export async function POST(request: Request) {

@@ -7,6 +7,7 @@ import type {
   LlmTool,
   LlmEmbedOptions,
   LlmEmbedResult,
+  LlmUsage,
 } from "./types";
 
 const DEFAULT_BASE_URLS: Record<string, string> = {
@@ -114,6 +115,7 @@ export const openAiAdapter: LlmAdapter = {
         content: choice.content,
         toolCalls: choice.toolCalls,
         finishReason: choice.finishReason,
+        usage: extractUsage(payload),
       };
     } finally {
       clearTimeout(timeout);
@@ -141,6 +143,10 @@ export const openAiAdapter: LlmAdapter = {
           temperature: options.temperature ?? 0.4,
           max_tokens: options.maxTokens,
           stream: true,
+          // OpenAI requires stream_options.include_usage to emit usage in the
+          // stream. OpenRouter returns usage in the final chunk by default;
+          // NVIDIA/custom endpoints may reject the unknown field, so skip it.
+          ...(options.provider === "openai" ? { stream_options: { include_usage: true } } : {}),
         },
         controller.signal
       );
@@ -153,6 +159,7 @@ export const openAiAdapter: LlmAdapter = {
       const decoder = new TextDecoder();
       let buffer = "";
       const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
+      let lastUsage: LlmUsage | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -167,7 +174,7 @@ export const openAiAdapter: LlmAdapter = {
           if (!trimmed.startsWith("data:")) continue;
           const data = trimmed.slice(5).trim();
           if (data === "[DONE]") {
-            yield { type: "done" };
+            yield { type: "done", usage: lastUsage };
             return;
           }
 
@@ -177,6 +184,9 @@ export const openAiAdapter: LlmAdapter = {
           } catch {
             continue;
           }
+
+          const usage = extractUsage(json);
+          if (usage) lastUsage = usage;
 
           const choice = firstChoice(json);
           if (!choice) continue;
@@ -204,7 +214,7 @@ export const openAiAdapter: LlmAdapter = {
       for (const call of Array.from(toolCalls.values())) {
         yield { type: "tool_call", call: { id: call.id || crypto.randomUUID(), name: call.name, arguments: call.arguments } };
       }
-      yield { type: "done" };
+      yield { type: "done", usage: lastUsage };
     } finally {
       clearTimeout(timeout);
     }
@@ -253,6 +263,18 @@ export const openAiAdapter: LlmAdapter = {
     return { embeddings };
   },
 };
+
+function extractUsage(payload: unknown): LlmUsage | undefined {
+  if (!isRecord(payload)) return undefined;
+  const usage = isRecord(payload.usage) ? payload.usage : null;
+  if (!usage) return undefined;
+
+  const usageOut: LlmUsage = {};
+  if (typeof usage.prompt_tokens === "number") usageOut.promptTokens = usage.prompt_tokens;
+  if (typeof usage.completion_tokens === "number") usageOut.completionTokens = usage.completion_tokens;
+  if (typeof usage.total_tokens === "number") usageOut.totalTokens = usage.total_tokens;
+  return usageOut.promptTokens !== undefined || usageOut.completionTokens !== undefined ? usageOut : undefined;
+}
 
 function extractChoice(payload: unknown): { content: string; toolCalls: LlmResult["toolCalls"]; finishReason?: string } {
   const choice = firstChoice(payload);

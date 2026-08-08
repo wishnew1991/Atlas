@@ -1,7 +1,7 @@
 import "server-only";
 
-import { cookies } from "next/headers";
-import { auth } from "@clerk/nextjs/server";
+import { cookies, headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 export class AtlasAuthenticationError extends Error {}
 
@@ -19,23 +19,6 @@ export interface AtlasActor {
   capabilities: AtlasCapabilities;
 }
 
-export function isClerkConfigured() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
-  );
-}
-
-const USER_ID_COOKIE = "atlas-user-id";
-
-async function resolveGuestUserId(): Promise<string | null> {
-  try {
-    const cookieStore = await cookies();
-    return cookieStore.get(USER_ID_COOKIE)?.value ?? null;
-  } catch {
-    return null;
-  }
-}
-
 async function buildCapabilities(authenticated: boolean): Promise<AtlasCapabilities> {
   const { resolveDefaultModel } = await import("@/lib/atlas/server/model-registry");
   const liveLlm = Boolean(await resolveDefaultModel());
@@ -50,27 +33,39 @@ async function buildCapabilities(authenticated: boolean): Promise<AtlasCapabilit
 }
 
 export async function getAtlasActor(): Promise<AtlasActor> {
-  if (!isClerkConfigured()) {
-    const guestUserId = await resolveGuestUserId();
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get("better-auth.session_token")?.value;
 
-    if (guestUserId) {
-      const capabilities = await buildCapabilities(true);
-      return { userId: guestUserId, isAuthenticated: true, capabilities };
+    if (sessionToken) {
+      const allCookies = cookieStore.getAll();
+      const cookieHeader = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
+      const h = new Headers({ cookie: cookieHeader });
+
+      const session = await auth.api.getSession({ headers: h });
+
+      if (session?.user) {
+        const capabilities = await buildCapabilities(true);
+        return { userId: session.user.id, isAuthenticated: true, capabilities };
+      }
     }
-
-    const capabilities = await buildCapabilities(true);
-    return { userId: "atlas-demo-user", isAuthenticated: true, capabilities };
+  } catch (err) {
+    console.error("[atlas] getAtlasActor failed to resolve session:", err);
   }
 
-  const { userId } = await auth();
+  const capabilities = await buildCapabilities(false);
+  return { userId: await guestUserIdFromCookies(), isAuthenticated: false, capabilities };
+}
 
-  if (!userId) {
-    const capabilities = await buildCapabilities(false);
-    return { userId: "atlas-demo-user", isAuthenticated: false, capabilities };
+async function guestUserIdFromCookies(): Promise<string> {
+  try {
+    const requestHeaders = await headers();
+    const cookie = requestHeaders.get("cookie") || "";
+    const match = /(?:^|;\s*)atlas-user-id=([^;]+)/.exec(cookie);
+    return match ? decodeURIComponent(match[1]) : "anonymous";
+  } catch {
+    return "anonymous";
   }
-
-  const capabilities = await buildCapabilities(true);
-  return { userId, isAuthenticated: true, capabilities };
 }
 
 export function canUseLiveLlm(actor: AtlasActor): boolean {
@@ -78,16 +73,19 @@ export function canUseLiveLlm(actor: AtlasActor): boolean {
 }
 
 export function isAtlasAdminActor(actor: AtlasActor): boolean {
-  if (!isClerkConfigured()) {
-    return true;
-  }
-
   const adminIds = (process.env.ATLAS_ADMIN_USER_IDS || "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
 
-  return adminIds.includes(actor.userId);
+  if (adminIds.length > 0) return adminIds.includes(actor.userId);
+
+  // No allowlist configured — default deny everywhere. A signed-in user is
+  // only treated as admin in explicit dev trust mode (ATLAS_DEV_TRUST_ALL)
+  // so the admin UI works out of the box in local development without
+  // forcing a user id into the env. Production always requires the allowlist.
+  const env = process.env.NODE_ENV || "development";
+  return env === "development" && process.env.ATLAS_DEV_TRUST_ALL === "true" && actor.isAuthenticated;
 }
 
 export async function requireAuthenticatedActor(): Promise<AtlasActor> {

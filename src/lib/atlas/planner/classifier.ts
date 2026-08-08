@@ -39,10 +39,14 @@ const CAPABILITY_DEFINITIONS: { capability: Capability; description: string }[] 
   { capability: "food", description: "Ordering, browsing, or talking about food, restaurants, delivery, or meals (e.g. 'order biryani', 'I'm hungry', 'find pizza near me')." },
   { capability: "travel", description: "Flights, hotels, trips, vacations, itineraries, or travel booking (e.g. 'book a flight', 'hotel in Paris')." },
   { capability: "shopping", description: "Buying products, goods, or general purchases that are not food, travel, or rides (e.g. 'order an iPhone', 'buy headphones')." },
-  { capability: "rides", description: "Taxis, cabs, ride-hailing, or chauffeur bookings (e.g. 'call an Uber', 'book a ride')." },
+  { capability: "rides", description: "Taxis, cabs, ride-hailing, or chauffeur bookings (e.g. 'call a taxi', 'book a ride')." },
   { capability: "calendar", description: "Appointments, meetings, salon/spa visits, schedules, reminders, or events (e.g. 'book a dentist appointment')." },
   { capability: "communication", description: "Sending messages, emails, calls, or notifications to a person (e.g. 'email John', 'text mom')." },
   { capability: "web", description: "General knowledge, news, lookups, explanations, or research with no real-world action (e.g. 'what is photosynthesis')." },
+  { capability: "payments", description: "Payment processing, wallet operations, or financial transactions." },
+  { capability: "email", description: "Reading, composing, searching, or managing email." },
+  { capability: "documents", description: "Creating, editing, or accessing documents, spreadsheets, or files." },
+  { capability: "messaging", description: "Sending or receiving messages through chat platforms or messaging services." },
 ];
 
 const CLASSIFIER_SYSTEM_PROMPT = `You are a capability classifier for the Atlas assistant. Given the user's latest message and recent conversation, decide which Atlas capability or capabilities it belongs to.
@@ -80,6 +84,10 @@ function normalizeCapability(value: unknown): Capability | null {
     "calendar",
     "communication",
     "web",
+    "payments",
+    "email",
+    "documents",
+    "messaging",
     "none",
   ];
   return (allowed as string[]).includes(value) ? (value as Capability) : null;
@@ -125,6 +133,10 @@ function parseClassifierJson(content: string): ClassifierOutput | null {
 
 const classifierCache = new Map<string, { result: ClassifierOutput; expires: number }>();
 const CLASSIFIER_TTL_MS = 60_000;
+
+export function clearClassifierCache(): void {
+  classifierCache.clear();
+}
 
 /**
  * Classify a turn semantically. Falls back to a low-confidence web result when

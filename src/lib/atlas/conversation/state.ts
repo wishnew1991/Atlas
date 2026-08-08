@@ -21,12 +21,13 @@ import { classifyCapabilities } from "@/lib/atlas/planner/classifier";
 // guessing. This keeps the deterministic planner as the hot path while avoiding a
 // growing keyword list: the set of weak verbs is small and stable.
 export const CAPABILITY_KEYWORDS: { capability: Capability; pattern: RegExp; strength: "strong" | "weak" }[] = [
-  { capability: "food", strength: "strong", pattern: /\b(food|restaurant|restaurants|biryani|biriyani|dinner|lunch|breakfast|swiggy|zomato|deliver(?:y|ed)?|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving|mcp)\b/i },
+  { capability: "food", strength: "strong", pattern: /\b(food|restaurant|restaurants|biryani|biriyani|dinner|lunch|breakfast|deliver(?:y|ed)?|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving)\b/i },
   { capability: "travel", strength: "strong", pattern: /\b(flight|flights|hotel|hotels|trip|trips|travel|book(ing)?\s+(a\s+)?(flight|hotel|trip)|vacation|itinerary|airbnb|airline)\b/i },
-  { capability: "shopping", strength: "strong", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|amazon|flipkart)\b/i },
+  { capability: "shopping", strength: "strong", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product)\b/i },
   { capability: "shopping", strength: "weak", pattern: /\b(order)\b/i },
-  { capability: "rides", strength: "strong", pattern: /\b(ride|rides|uber|ola|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop|chauffeur)\b/i },
+  { capability: "rides", strength: "strong", pattern: /\b(ride|rides|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop|chauffeur)\b/i },
   { capability: "calendar", strength: "strong", pattern: /\b(appointment|appointments|schedule|meeting|book\s+(a\s+)?(slot|appointment)|salon|spa|dentist|consultation|calendar|remind\s+me|event)\b/i },
+  { capability: "appointments", strength: "strong", pattern: /\b(appointment|appointments|schedule|meeting|book\s+(a\s+)?(slot|appointment)|salon|spa|dentist|consultation|remind\s+me|event)\b/i },
   { capability: "communication", strength: "strong", pattern: /\b(email|e-mail|message|text|sms|whatsapp|slack)\b/i },
   { capability: "communication", strength: "weak", pattern: /\b(call|send|notify|tell\s+\w+)\b/i },
   { capability: "web", strength: "strong", pattern: /\b(news|lookup|what\s+is|who\s+is|latest|current|weather|explain|how\s+(to|do)|why\s+|research)\b/i },
@@ -40,6 +41,7 @@ const CAPABILITY_TO_DOMAIN: Partial<Record<Capability, AtlasActionDomain>> = {
   shopping: "shopping",
   rides: "rides",
   calendar: "appointments",
+  appointments: "appointments",
 };
 
 /**

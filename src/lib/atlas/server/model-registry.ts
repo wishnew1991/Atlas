@@ -1,6 +1,7 @@
 import "server-only";
 
 import { parseVoiceSttMode, parseVoiceTtsMode, type VoiceSttMode, type VoiceTtsMode } from "@/lib/atlas/voice-modes";
+import { decryptSecret, encryptSecret } from "@/lib/security/secrets";
 import { prisma } from "./prisma";
 
 export type AtlasProvider = "openai" | "anthropic" | "google" | "nvidia" | "custom";
@@ -94,7 +95,7 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
       id: model.id,
       provider: model.credential.provider as AtlasProvider,
       label: model.label,
-      apiKey: model.credential.apiKey,
+      apiKey: decryptSecret(model.credential.apiKey),
       baseUrl: model.credential.baseUrl ?? undefined,
       enabled: model.enabled,
       credentialId: model.credentialId,
@@ -213,7 +214,7 @@ export async function writeVoiceConfig(voice: AtlasVoiceConfig): Promise<AtlasVo
 
 export async function readSerperApiKey(): Promise<string> {
   const record = await prisma.setting.findUnique({ where: { key: "serperApiKey" } });
-  return record?.value ?? "";
+  return decryptSecret(record?.value ?? "");
 }
 
 export async function writeSerperApiKey(apiKey: string): Promise<void> {
@@ -226,8 +227,8 @@ export async function writeSerperApiKey(apiKey: string): Promise<void> {
 
   await prisma.setting.upsert({
     where: { key: "serperApiKey" },
-    create: { key: "serperApiKey", value: clean },
-    update: { value: clean },
+    create: { key: "serperApiKey", value: encryptSecret(clean, "Serper API key") },
+    update: { value: encryptSecret(clean, "Serper API key") },
   });
 }
 
@@ -267,7 +268,7 @@ export async function createCredential(input: AtlasCredential): Promise<AtlasCre
     data: {
       label: input.label,
       provider: input.provider,
-      apiKey: input.apiKey,
+      apiKey: encryptSecret(input.apiKey, "credential API key"),
       baseUrl: input.baseUrl,
     },
   });
@@ -276,7 +277,7 @@ export async function createCredential(input: AtlasCredential): Promise<AtlasCre
     id: created.id,
     label: created.label,
     provider: created.provider as AtlasProvider,
-    apiKey: created.apiKey,
+    apiKey: input.apiKey,
     baseUrl: created.baseUrl ?? undefined,
   };
 }
@@ -288,7 +289,7 @@ export async function listCredentials(): Promise<AtlasCredential[]> {
     id: credential.id,
     label: credential.label,
     provider: credential.provider as AtlasProvider,
-    apiKey: credential.apiKey,
+    apiKey: decryptSecret(credential.apiKey),
     baseUrl: credential.baseUrl ?? undefined,
   }));
 }
@@ -491,7 +492,7 @@ export async function listMcpServers(): Promise<AtlasMcpServer[]> {
     id: server.id,
     name: server.name,
     url: server.url,
-    token: server.token,
+    token: decryptSecret(server.token),
     command: server.command,
     args: parseList(server.args),
     env: parseEnv(server.env),
@@ -516,7 +517,7 @@ export async function getMcpServer(id: string): Promise<AtlasMcpServer | null> {
     id: server.id,
     name: server.name,
     url: server.url,
-    token: server.token,
+    token: decryptSecret(server.token),
     command: server.command,
     args: parseList(server.args),
     env: parseEnv(server.env),
@@ -534,7 +535,8 @@ export async function upsertMcpServer(input: AtlasMcpServerInput): Promise<Atlas
   const data = {
     name: input.name,
     url: input.url && input.url.trim().length > 0 ? input.url.trim() : null,
-    token: input.token && input.token.trim().length > 0 ? input.token.trim() : null,
+    token:
+      input.token && input.token.trim().length > 0 ? encryptSecret(input.token.trim(), "MCP token") : null,
     command: input.command ?? "",
     args: input.args.join("\n"),
     env: Object.entries(input.env)
@@ -553,7 +555,7 @@ export async function upsertMcpServer(input: AtlasMcpServerInput): Promise<Atlas
       id: updated.id,
       name: updated.name,
       url: updated.url,
-      token: updated.token,
+      token: decryptSecret(updated.token),
       command: updated.command,
       args: parseList(updated.args),
       env: parseEnv(updated.env),
@@ -573,7 +575,7 @@ export async function upsertMcpServer(input: AtlasMcpServerInput): Promise<Atlas
     id: created.id,
     name: created.name,
     url: created.url,
-    token: created.token,
+    token: decryptSecret(created.token),
     command: created.command,
     args: parseList(created.args),
     env: parseEnv(created.env),

@@ -1,0 +1,32 @@
+{
+  "name": "Failure — MCP Timeout Recovery",
+  "description": "Tests graceful recovery after MCP timeout during food ordering",
+  "domain": "food",
+  "turns": [
+    {
+      "user": "I want pizza",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me restaurants near me",
+      "injectFault": {
+        "llmErrorRate": 1.0
+      },
+      "expect": {
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Try again, show me pizza places",
+      "clearFaults": true,
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

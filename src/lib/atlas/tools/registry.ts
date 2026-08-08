@@ -57,11 +57,11 @@ function stringArg(value: unknown, fallback = ""): string {
 // Keywords that let us infer the Atlas action domain from free-form text when
 // the model omits or guesses the `domain` argument.
 const DOMAIN_INFERENCE: { domain: AtlasActionDomain; pattern: RegExp }[] = [
-  { domain: "food", pattern: /\b(food|restaurant|restaurants|biryani|biriyani|dinner|lunch|breakfast|swiggy|zomato|deliver(?:y|ed)?|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving)\b/i },
+  { domain: "food", pattern: /\b(food|restaurant|restaurants|biryani|biriyani|dinner|lunch|breakfast|deliver(?:y|ed)?|menu|pizza|burger|sushi|meal|snack|eat|cuisine|hungry|craving)\b/i },
   { domain: "travel", pattern: /\b(flight|flights|hotel|hotels|trip|trips|travel|book(ing)?\s+(a\s+)?(flight|hotel|trip)|vacation|itinerary|airbnb|airline)\b/i },
-  { domain: "rides", pattern: /\b(ride|rides|uber|ola|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop|chauffeur)\b/i },
+  { domain: "rides", pattern: /\b(ride|rides|taxi|cab|car\s+(ride|booking)|book\s+a\s+ride|pickup|drop|chauffeur)\b/i },
   { domain: "appointments", pattern: /\b(appointment|appointments|doctor|salon|spa|meeting|book\s+(a\s+)?(slot|appointment)|schedule\s+(a\s+)?(visit|call)|dentist|consultation)\b/i },
-  { domain: "shopping", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|amazon|flipkart|order)\b/i },
+  { domain: "shopping", pattern: /\b(buy|purchase|shop|shopping|cart|checkout|product|order)\b/i },
 ];
 
 function inferDomain(text: string): AtlasActionDomain {
@@ -489,8 +489,13 @@ const CAPABILITY_TOOLS: Record<Exclude<Capability, "none">, string[]> = {
   shopping: ["atlas_search", "atlas_prepare_approval"],
   rides: ["atlas_search", "atlas_prepare_approval"],
   calendar: ["atlas_search", "atlas_prepare_approval"],
+  appointments: ["atlas_search", "atlas_prepare_approval"],
   communication: ["atlas_search", "atlas_prepare_approval"],
   web: ["web_search"],
+  payments: ["atlas_search", "atlas_prepare_approval"],
+  email: ["atlas_search", "atlas_prepare_approval"],
+  documents: ["atlas_search", "atlas_prepare_approval"],
+  messaging: ["atlas_search", "atlas_prepare_approval"],
 };
 
 /**

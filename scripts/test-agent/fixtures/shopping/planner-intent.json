@@ -1,0 +1,12 @@
+[
+  { "input": "Buy a laptop", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Order headphones", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Find a monitor", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Compare two phones", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "I need a new keyboard", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Purchase a gaming mouse", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Show me the best deals on tablets", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Add a charger to my cart", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Checkout my cart", "history": [], "capabilities": ["shopping"], "isContinuation": false },
+  { "input": "Where can I buy a webcam", "history": [], "capabilities": ["shopping"], "isContinuation": false }
+]

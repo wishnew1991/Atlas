@@ -6,14 +6,66 @@ datasource db {
   provider = "sqlite"
 }
 
+// ── Better Auth ──
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String   @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ── Existing Atlas models ──
+
 model AtlasUser {
-  id          String   @id @default(cuid())
+  id        String   @id @default(cuid())
   clerkId    String   @unique
-  email       String?
-  name        String?
-  createdAt   DateTime @default(now())
-  approvals   Approval[]
-  conversations Conversation[]
+  email      String?
+  name       String?
+  createdAt  DateTime @default(now())
 }
 
 /// Consumer profile: identity, addresses, payment methods, privacy toggles.
@@ -90,8 +142,8 @@ model VoiceConfig {
 
 model Approval {
   id          String    @id
+  /// Actor id (better-auth user id or guest id, null for legacy guests). No AtlasUser FK until identity stabilizes.
   userId      String?
-  user        AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain      String
   title       String
   summary     String
@@ -108,8 +160,8 @@ model Approval {
 
 model Conversation {
   id           String    @id @default(cuid())
+  /// Actor id (better-auth user id or per-visitor guest id). No AtlasUser FK until identity stabilizes.
   userId       String?
-  user         AtlasUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Rolling summary of older turns so the model keeps context without full history.
   summary      String    @default("")
   lastMessageAt DateTime @default(now())
@@ -165,6 +217,29 @@ model TurnTrace {
   createdAt      DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+/// Per-LLM-call observability for the live chat pipeline.
+model LlmLog {
+  id             String   @id @default(cuid())
+  runId          String?
+  conversationId String?
+  userId         String?
+  domain         String?
+  modelId        String?
+  provider       String?
+  round          Int      @default(0)
+  tokensIn       Int?
+  tokensOut      Int?
+  latencyMs      Int?
+  success        Boolean  @default(true)
+  error          String?
+  toolCalls      String   @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([modelId, createdAt])
   @@index([createdAt])
 }
 
@@ -369,4 +444,83 @@ model ExecutionEvent {
   createdAt   DateTime @default(now())
 
   @@index([executionId, createdAt])
+}
+
+// ── Capability Registry ──
+
+model Capability {
+  id              String   @id                          // "food", "shopping", "travel", etc.
+  name            String                                // "Food Ordering", "Shopping"
+  category        String   @default("action")           // flexible metadata: "action" | "communication" | "knowledge" | any
+  icon            String?
+  description     String?
+  requiresApproval Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  integrations    IntegrationCapability[]
+}
+
+// ── Integration Registry ──
+
+model Integration {
+  id              String   @id                          // "swiggy", "zomato", "amazon"
+  name            String                                // "Swiggy", "Zomato", "Amazon"
+  transport       String   @default("mcp")              // "mcp" | "rest" | "sdk" | "graphql"
+  authMethodsJson String   @default("[]")               // JSON: AuthMethod[]
+  icon            String?
+  description     String?
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  capacities      IntegrationCapability[]
+  configs         IntegrationConfig[]
+  connections     UserConnection[]
+}
+
+model IntegrationCapability {
+  id            String      @id @default(cuid())
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  capabilityId  String
+  capability    Capability  @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  priority      Int         @default(10)                // lower = preferred
+
+  @@unique([integrationId, capabilityId])
+  @@index([capabilityId, priority])
+}
+
+model IntegrationConfig {
+  id            String      @id                         // same as integrationId for default config
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  label         String?
+  baseUrl       String?
+  apiKey        String?                                 // encrypted at rest
+  oauthToken    String?                                 // encrypted
+  oauthRefresh  String?
+  enabled       Boolean     @default(true)
+  metadataJson  String      @default("{}")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([integrationId])
+}
+
+model UserConnection {
+  id              String      @id @default(cuid())
+  userId          String
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  displayName     String?
+  oauthToken      String?
+  oauthRefresh    String?
+  tokenExpiresAt  DateTime?
+  apiKey          String?
+  metadataJson    String      @default("{}")
+  status          String      @default("active")        // "active" | "expired" | "revoked"
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([userId, integrationId])
+  @@index([userId, status])
 }

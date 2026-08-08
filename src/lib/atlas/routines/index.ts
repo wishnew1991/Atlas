@@ -13,6 +13,10 @@ function ensureRunners() {
   registered = true;
 }
 
+export function resetRegistered(): void {
+  registered = false;
+}
+
 /**
  * Routines — how Atlas learns a user's habits without being told.
  *

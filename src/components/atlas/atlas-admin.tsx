@@ -8,6 +8,10 @@ import type {
   AtlasProvider,
   AtlasMcpServer,
 } from "@/lib/atlas/server/model-registry";
+import type { IntegrationDefinition, AuthMethod } from "@/lib/atlas/integrations/types";
+import { TRANSPORT_KINDS } from "@/lib/atlas/integrations/types";
+import { IntegrationAvatar } from "@/components/atlas/integration-avatar";
+import { isCanonicalCapability, type CanonicalCapability } from "@/lib/atlas/capabilities/types";
 import {
   STT_MODE_LABELS,
   TTS_MODE_LABELS,
@@ -35,30 +39,36 @@ const providers: AtlasProvider[] = ["openai", "anthropic", "google", "nvidia", "
 
 const builtInDomains = ["shopping", "travel", "food", "rides", "appointments"];
 
-type AdminTab = "providers" | "routing" | "mcp" | "search" | "domains" | "voice";
+type AdminTab = "llm" | "integrations" | "mcp" | "search" | "domains" | "voice" | "logs";
 
 const adminNav: ReadonlyArray<{
   group: string;
   items: ReadonlyArray<{ id: AdminTab; label: string }>;
 }> = [
   {
-    group: "Models",
+    group: "AI",
     items: [
-      { id: "providers", label: "Providers" },
-      { id: "routing", label: "Routing" },
+      { id: "llm", label: "LLM" },
+      { id: "logs", label: "LLM Logs" },
     ],
   },
   {
-    group: "Services",
+    group: "Platform",
     items: [
-      { id: "mcp", label: "MCP" },
+      { id: "integrations", label: "Integrations" },
+    ],
+  },
+  {
+    group: "Infrastructure",
+    items: [
+      { id: "mcp", label: "MCP Servers" },
       { id: "search", label: "Search" },
+      { id: "domains", label: "Domains" },
     ],
   },
   {
     group: "Experience",
     items: [
-      { id: "domains", label: "Domains" },
       { id: "voice", label: "Voice" },
     ],
   },
@@ -258,8 +268,161 @@ function AddModelInline({
   );
 }
 
+interface LlmLogEntry {
+  id: string;
+  runId: string | null;
+  conversationId: string | null;
+  userId: string | null;
+  domain: string | null;
+  modelId: string | null;
+  provider: string | null;
+  round: number;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  latencyMs: number | null;
+  success: boolean;
+  error: string | null;
+  toolCalls: string;
+  createdAt: string;
+}
+
+function parseToolCallList(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function LlmLogsPanel() {
+  const [logs, setLogs] = useState<LlmLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await fetch("/api/admin/llm-logs?limit=100");
+      const payload = await response.json();
+      if (!response.ok) {
+        setLoadError(payload.error || "Could not load LLM logs.");
+        return;
+      }
+      setLogs(payload.logs ?? []);
+      setTotal(payload.total ?? 0);
+    } catch {
+      setLoadError("Could not load LLM logs.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const successCount = logs.filter((log) => log.success).length;
+  const tokensInTotal = logs.reduce((sum, log) => sum + (log.tokensIn ?? 0), 0);
+  const tokensOutTotal = logs.reduce((sum, log) => sum + (log.tokensOut ?? 0), 0);
+
+  return (
+    <div className="atlas-admin-panel">
+      <section className="atlas-section">
+        <div className="atlas-section__header">
+          <p className="atlas-section__eyebrow">Observability</p>
+          <h2 className="atlas-section__title">LLM call logs</h2>
+          <p className="atlas-section__copy">
+            Every live model call the assistant makes — model, provider, tokens, latency, and outcome.
+          </p>
+        </div>
+
+        <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
+          <span className="atlas-badge atlas-badge--blue">{total} total</span>
+          <span className={`atlas-badge ${successCount === logs.length && logs.length > 0 ? "atlas-badge--green" : ""}`}>
+            {successCount}/{logs.length} success
+          </span>
+          <span className="atlas-badge">{tokensInTotal} tokens in</span>
+          <span className="atlas-badge">{tokensOutTotal} tokens out</span>
+          <button
+            type="button"
+            className="atlas-action atlas-action--ghost atlas-action--small"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+
+        {loadError ? (
+          <div className="atlas-banner atlas-banner--error">
+            <span className="atlas-banner__dot" aria-hidden="true" />
+            <span>{loadError}</span>
+          </div>
+        ) : null}
+
+        {logs.length === 0 && !loading ? (
+          <div className="atlas-card atlas-card--soft">
+            <div className="atlas-card__title">No LLM calls yet</div>
+            <div className="atlas-card__body">
+              Send a message in chat with a model configured and the calls will appear here.
+            </div>
+          </div>
+        ) : (
+          <div className="atlas-llm-log">
+            <div className="atlas-llm-log__head">
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--time">Time</span>
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--model">Model</span>
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--tokens">Tokens</span>
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--latency">Latency</span>
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--status">Status</span>
+              <span className="atlas-llm-log__cell atlas-llm-log__cell--tools">Tools</span>
+            </div>
+            {logs.map((log) => (
+              <div className="atlas-llm-log__entry" key={log.id}>
+                <div className="atlas-llm-log__row" data-failed={log.success ? undefined : "true"}>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--time">
+                    {new Date(log.createdAt).toLocaleTimeString()}
+                  </span>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--model">
+                    {log.modelId ?? "—"}
+                    <span className="atlas-llm-log__meta">
+                      {[log.provider, log.domain, log.round > 0 ? `round ${log.round}` : null]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </span>
+                  </span>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--tokens">
+                    {log.tokensIn ?? "–"} → {log.tokensOut ?? "–"}
+                  </span>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--latency">
+                    {log.latencyMs != null ? `${(log.latencyMs / 1000).toFixed(1)}s` : "–"}
+                  </span>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--status">
+                    <span className={`atlas-badge ${log.success ? "atlas-badge--green" : "atlas-badge--red"}`}>
+                      {log.success ? "ok" : "failed"}
+                    </span>
+                  </span>
+                  <span className="atlas-llm-log__cell atlas-llm-log__cell--tools">
+                    {parseToolCallList(log.toolCalls).join(", ") || "—"}
+                  </span>
+                </div>
+                {!log.success && log.error ? (
+                  <div className="atlas-llm-log__error">{log.error}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function AtlasAdmin() {
-  const [activeTab, setActiveTab] = useState<AdminTab>("providers");
+  const [activeTab, setActiveTab] = useState<AdminTab>("llm");
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [routing, setRouting] = useState<RoutingRule[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
@@ -317,6 +480,23 @@ export function AtlasAdmin() {
   const [mcpDiscoveredRoles, setMcpDiscoveredRoles] = useState<string[]>([]);
   const [mcpDiscoveredToolRoles, setMcpDiscoveredToolRoles] = useState<Record<string, string[]>>({});
   const [connectingId, setConnectingId] = useState<string | null>(null);
+
+  const [integrations, setIntegrations] = useState<IntegrationDefinition[]>([]);
+  const [integrationCapabilities, setIntegrationCapabilities] = useState<{ id: string; name: string; category: string }[]>([]);
+  const [integrationHealth, setIntegrationHealth] = useState<{ integrationId: string; name: string; configured: boolean; status: string }[]>([]);
+  const [integrationsView, setIntegrationsView] = useState<"catalog" | "capability">("catalog");
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
+  const [integrationConfigForm, setIntegrationConfigForm] = useState({ baseUrl: "", apiKey: "" });
+  const [addIntegrationOpen, setAddIntegrationOpen] = useState(false);
+  const [addIntegrationForm, setAddIntegrationForm] = useState({
+    id: "", name: "", transport: "mcp", authMethods: JSON.stringify([{ kind: "oauth2" }]),
+    capabilities: JSON.stringify([]),
+  });
+  const [editIntegrationOpen, setEditIntegrationOpen] = useState(false);
+  const [editIntegrationForm, setEditIntegrationForm] = useState({
+    name: "", transport: "mcp", enabled: true,
+    authMethods: "", capabilities: "",
+  });
 
   const load = useCallback(async () => {
     try {
@@ -517,6 +697,44 @@ export function AtlasAdmin() {
     void loadMcpServers();
   }, [loadMcpServers]);
 
+  const loadIntegrations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/integrations");
+      const payload = await response.json();
+      if (response.ok) {
+        if (Array.isArray(payload.integrations)) setIntegrations(payload.integrations);
+        if (Array.isArray(payload.capabilities)) setIntegrationCapabilities(payload.capabilities);
+      }
+    } catch {
+      /* non-admin */
+    }
+  }, []);
+
+  const loadIntegrationHealth = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/integrations/health");
+      const payload = await response.json();
+      if (response.ok && Array.isArray(payload.health)) setIntegrationHealth(payload.health);
+    } catch {
+      /* non-admin */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadIntegrations();
+  }, [loadIntegrations]);
+
+  useEffect(() => {
+    void loadIntegrationHealth();
+  }, [loadIntegrationHealth]);
+
+  useEffect(() => {
+    if (activeTab === "integrations") {
+      void loadIntegrations();
+      void loadIntegrationHealth();
+    }
+  }, [activeTab, loadIntegrations, loadIntegrationHealth]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
@@ -548,6 +766,7 @@ export function AtlasAdmin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          credentialId: credential.id,
           provider: credential.provider,
           apiKey: credential.apiKey,
           baseUrl: credential.baseUrl ?? "",
@@ -1053,6 +1272,155 @@ export function AtlasAdmin() {
     }
   };
 
+  const handleAddIntegration = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setNotice(null);
+    setError(null);
+    try {
+      const authMethods = JSON.parse(addIntegrationForm.authMethods);
+      const capabilities = JSON.parse(addIntegrationForm.capabilities || "[]");
+      const response = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: addIntegrationForm.id.trim(),
+          name: addIntegrationForm.name.trim(),
+          transport: addIntegrationForm.transport,
+          authMethods,
+          capabilities,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) { setError(payload.error || "Could not create integration."); return; }
+      setIntegrations((prev) => [...prev, payload.integration]);
+      setAddIntegrationOpen(false);
+      setAddIntegrationForm({ id: "", name: "", transport: "mcp", authMethods: JSON.stringify([{ kind: "oauth2" }]), capabilities: JSON.stringify([]) });
+      setNotice("Integration created.");
+      void loadIntegrationHealth();
+    } catch {
+      setError("Could not create integration.");
+    }
+  };
+
+  const handleDeleteIntegration = async (id: string) => {
+    try {
+      const response = await fetch(`/api/admin/integrations/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setError((payload as { error?: string }).error || "Could not delete integration.");
+        return;
+      }
+      setIntegrations((prev) => prev.filter((i) => i.id !== id));
+      setSelectedIntegrationId(null);
+      setNotice("Integration deleted.");
+      void loadIntegrationHealth();
+    } catch {
+      setError("Could not delete integration.");
+    }
+  };
+
+  const handleToggleIntegration = async (id: string, enabled: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/integrations/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (response.ok) {
+        setIntegrations((prev) => prev.map((i) => (i.id === id ? { ...i, enabled } : i)));
+        void loadIntegrationHealth();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveIntegrationConfig = async (integrationId: string) => {
+    setNotice(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/integrations/${integrationId}/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: integrationConfigForm.baseUrl || undefined,
+          apiKey: integrationConfigForm.apiKey || undefined,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setError((payload as { error?: string }).error || "Could not save config.");
+        return;
+      }
+      setNotice("Configuration saved.");
+      void loadIntegrationHealth();
+    } catch {
+      setError("Could not save config.");
+    }
+  };
+
+  const handleUpdateIntegration = async (id: string) => {
+    setNotice(null);
+    setError(null);
+    try {
+      const authMethods = editIntegrationForm.authMethods ? JSON.parse(editIntegrationForm.authMethods) : undefined;
+      const capabilities = editIntegrationForm.capabilities ? JSON.parse(editIntegrationForm.capabilities) : undefined;
+      const response = await fetch(`/api/admin/integrations/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editIntegrationForm.name || undefined,
+          transport: editIntegrationForm.transport || undefined,
+          enabled: editIntegrationForm.enabled,
+          authMethods,
+          capabilities,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setError((payload as { error?: string }).error || "Could not update integration.");
+        return;
+      }
+      setEditIntegrationOpen(false);
+      setSelectedIntegrationId(null);
+      void loadIntegrations();
+      void loadIntegrationHealth();
+      setNotice("Integration updated.");
+    } catch {
+      setError("Could not update integration.");
+    }
+  };
+
+  const loadIntegrationConfig = async (integrationId: string) => {
+    try {
+      const response = await fetch(`/api/admin/integrations/${integrationId}/config`);
+      const payload = await response.json();
+      if (response.ok && payload.config) {
+        setIntegrationConfigForm({ baseUrl: payload.config.baseUrl || "", apiKey: "" });
+      }
+    } catch { /* ignore */ }
+  };
+
+  const selectIntegration = (id: string) => {
+    if (selectedIntegrationId === id) {
+      setSelectedIntegrationId(null);
+      setEditIntegrationOpen(false);
+      return;
+    }
+    setSelectedIntegrationId(id);
+    setEditIntegrationOpen(false);
+    void loadIntegrationConfig(id);
+  };
+
+  const startEditIntegration = (integration: IntegrationDefinition) => {
+    setEditIntegrationForm({
+      name: integration.name,
+      transport: integration.transport,
+      enabled: integration.enabled,
+      authMethods: JSON.stringify(integration.authMethods),
+      capabilities: JSON.stringify(integration.capabilities),
+    });
+    setEditIntegrationOpen(true);
+  };
+
   return (
     <div className="atlas-admin">
       <aside className="atlas-admin__nav" aria-label="Admin sections">
@@ -1084,7 +1452,7 @@ export function AtlasAdmin() {
             {credentials.length} provider{credentials.length === 1 ? "" : "s"}
           </span>
           <span className={`atlas-badge ${mcpServers.length > 0 ? "atlas-badge--green" : ""}`}>
-            {mcpServers.length} MCP
+            {mcpServers.length} MCP Servers
           </span>
           <span className={`atlas-badge ${models.some((m) => m.enabled) ? "atlas-badge--green" : ""}`}>
             {models.filter((m) => m.enabled).length} models
@@ -1107,7 +1475,7 @@ export function AtlasAdmin() {
           </div>
         ) : null}
 
-      {activeTab === "providers" ? (
+      {activeTab === "llm" ? (
         <div className="atlas-admin-panel">
           <section className="atlas-section">
             <div className="atlas-section__header">
@@ -1162,9 +1530,50 @@ export function AtlasAdmin() {
             ) : null}
           </section>
 
+          {/* ── Per-Domain Model Routing ── */}
+
           <section className="atlas-section">
             <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Providers</p>
+              <p className="atlas-section__eyebrow">Model map</p>
+              <h2 className="atlas-section__title">Per-domain model routing</h2>
+              <p className="atlas-section__copy">
+                Assign specific models to action domains. Falls back to the default routing chain when unset.
+              </p>
+            </div>
+
+            <div className="atlas-rows">
+              {domains.map((domain) => {
+                const current = routing.find((entry) => entry.domain === domain)?.modelId || defaultModelId;
+
+                return (
+                  <div className="atlas-row" key={domain}>
+                    <div className="atlas-row__meta">
+                      <div className="atlas-row__title">{domain}</div>
+                      <div className="atlas-row__body">Falls back to default if unset</div>
+                    </div>
+                    <select
+                      className="atlas-action atlas-action--ghost"
+                      value={current}
+                      onChange={(event) => updateDomainRoute(domain, event.target.value)}
+                    >
+                      <option value={defaultModelId}>Default ({defaultModelId || "none"})</option>
+                      {models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.label || model.id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ── Connected Providers ── */}
+
+          <section className="atlas-section">
+            <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Credentials</p>
               <h2 className="atlas-section__title">Connected providers</h2>
             </div>
 
@@ -1335,41 +1744,282 @@ export function AtlasAdmin() {
         </div>
       ) : null}
 
-      {activeTab === "routing" ? (
+      {activeTab === "integrations" ? (
         <div className="atlas-admin-panel">
-      <section className="atlas-section">
-        <div className="atlas-section__header">
-          <p className="atlas-section__eyebrow">Routing</p>
-          <h2 className="atlas-section__title">Per-domain model</h2>
-        </div>
+          <section className="atlas-section">
+            <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Platform</p>
+              <h2 className="atlas-section__title">Integrations</h2>
+              <p className="atlas-section__copy">
+                Manage the service catalog — define integrations, map capabilities, and monitor health.
+              </p>
+            </div>
 
-        <div className="atlas-rows">
-          {domains.map((domain) => {
-            const current = routing.find((entry) => entry.domain === domain)?.modelId || defaultModelId;
+            {/* Stats */}
+            <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
+              <span className="atlas-badge atlas-badge--blue">{integrations.length} total</span>
+              <span className="atlas-badge atlas-badge--green">{integrations.filter((i) => i.enabled).length} enabled</span>
+              <span className="atlas-badge atlas-badge--red">{integrations.filter((i) => !i.enabled).length} disabled</span>
+              <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "healthy").length > 0 ? "atlas-badge--green" : ""}`}>
+                {integrationHealth.filter((h) => h.status === "healthy").length} healthy
+              </span>
+              <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "unconfigured").length > 0 ? "atlas-badge--amber" : ""}`}>
+                {integrationHealth.filter((h) => h.status === "unconfigured").length} unconfigured
+              </span>
+              <span className="atlas-badge atlas-badge--blue">
+                {integrations.filter((i) => i.authMethods.some((m) => m.kind === "oauth2")).length} OAuth
+              </span>
+              <span className="atlas-badge">
+                {integrations.filter((i) => i.authMethods.some((m) => m.kind === "api_key")).length} API key
+              </span>
+            </div>
 
-            return (
-              <div className="atlas-row" key={domain}>
-                <div className="atlas-row__meta">
-                  <div className="atlas-row__title">{domain}</div>
-                  <div className="atlas-row__body">Falls back to default if unset</div>
+            {/* View toggle */}
+            <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                className={`atlas-chip ${integrationsView === "catalog" ? "atlas-chip--primary" : ""}`}
+                onClick={() => { setIntegrationsView("catalog"); setSelectedIntegrationId(null); }}
+              >
+                Catalog
+              </button>
+              <button
+                type="button"
+                className={`atlas-chip ${integrationsView === "capability" ? "atlas-chip--primary" : ""}`}
+                onClick={() => { setIntegrationsView("capability"); setSelectedIntegrationId(null); }}
+              >
+                By Capability
+              </button>
+              <button
+                type="button"
+                className="atlas-action atlas-action--primary atlas-action--small"
+                style={{ marginLeft: "auto" }}
+                onClick={() => setAddIntegrationOpen((v) => !v)}
+              >
+                {addIntegrationOpen ? "Cancel" : "+ Add Integration"}
+              </button>
+            </div>
+
+            {/* Add form */}
+            {addIntegrationOpen ? (
+              <form className="atlas-card" onSubmit={handleAddIntegration} style={{ marginBottom: 14 }}>
+                <div className="atlas-grid atlas-grid--2">
+                  <label className="atlas-assistant__composer-field">
+                    <span className="atlas-assistant__composer-label">ID (slug)</span>
+                    <input className="atlas-assistant__composer-value" value={addIntegrationForm.id} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, id: e.target.value })} placeholder="swiggy" required />
+                  </label>
+                  <label className="atlas-assistant__composer-field">
+                    <span className="atlas-assistant__composer-label">Name</span>
+                    <input className="atlas-assistant__composer-value" value={addIntegrationForm.name} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, name: e.target.value })} placeholder="Swiggy" required />
+                  </label>
+                  <label className="atlas-assistant__composer-field">
+                    <span className="atlas-assistant__composer-label">Transport</span>
+                    <select className="atlas-assistant__composer-value" value={addIntegrationForm.transport} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, transport: e.target.value })}>
+                      {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+                    </select>
+                  </label>
+                  <label className="atlas-assistant__composer-field">
+                    <span className="atlas-assistant__composer-label">Auth Methods (JSON)</span>
+                    <textarea className="atlas-assistant__composer-value" value={addIntegrationForm.authMethods} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, authMethods: e.target.value })} placeholder='[{"kind":"oauth2"}]' rows={2} />
+                  </label>
                 </div>
-                <select
-                  className="atlas-action atlas-action--ghost"
-                  value={current}
-                  onChange={(event) => updateDomainRoute(domain, event.target.value)}
-                >
-                  <option value={defaultModelId}>Default ({defaultModelId || "none"})</option>
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label || model.id}
-                    </option>
-                  ))}
-                </select>
+                <label className="atlas-assistant__composer-field">
+                  <span className="atlas-assistant__composer-label">Capabilities (JSON)</span>
+                  <textarea className="atlas-assistant__composer-value" value={addIntegrationForm.capabilities} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, capabilities: e.target.value })} placeholder='[{"capabilityId":"food","priority":10}]' rows={2} />
+                </label>
+                <div style={{ marginTop: 14 }}>
+                  <button type="submit" className="atlas-action atlas-action--primary">Create Integration</button>
+                </div>
+              </form>
+            ) : null}
+
+            {/* Catalog View */}
+            {integrationsView === "catalog" ? (
+              <div className="atlas-prows">
+                {integrations.length === 0 ? (
+                  <div className="atlas-card atlas-card--soft">
+                    <div className="atlas-card__title">No integrations yet</div>
+                    <div className="atlas-card__body">Add your first integration above to start building the service catalog.</div>
+                  </div>
+                ) : (
+                  integrations.map((integration) => {
+                    const health = integrationHealth.find((h) => h.integrationId === integration.id);
+                    const isSelected = selectedIntegrationId === integration.id;
+                    return (
+                      <div key={integration.id}>
+                        <div className="atlas-prow" role="button" tabIndex={0} aria-expanded={isSelected} onClick={() => selectIntegration(integration.id)} onKeyDown={(e) => { if (e.key === "Enter") selectIntegration(integration.id); }}>
+                          <div className="atlas-prow__info">
+                            <IntegrationAvatar integrationId={integration.id} name={integration.name} size="md" decorative />
+                            <div className="atlas-prow__meta">
+                              <span className="atlas-prow__name">{integration.name}</span>
+                              <span className="atlas-prow__detail">
+                                {integration.transport.toUpperCase()} · {integration.authMethods.map((m) => m.kind).join(", ")}
+                              </span>
+                            </div>
+                            <span className={`atlas-badge ${integration.enabled ? "atlas-badge--green" : "atlas-badge--red"}`}>
+                              {integration.enabled ? "Active" : "Disabled"}
+                            </span>
+                            {health ? (
+                              <span className={`atlas-badge ${health.status === "healthy" ? "atlas-badge--green" : health.status === "unconfigured" ? "atlas-badge--amber" : "atlas-badge--red"}`}>
+                                {health.status}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="atlas-prow__models">
+                            <span className="atlas-prow__models-label">Capabilities</span>
+                            {integration.capabilities.length === 0 ? (
+                              <span className="atlas-prow__models-empty">None</span>
+                            ) : (
+                              <div className="atlas-chip-row">
+                                {integration.capabilities.map((cap) => (
+                                  <span key={cap.capabilityId} className="atlas-chip atlas-chip--quiet">{cap.capabilityId}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="atlas-prow__actions">
+                            <button type="button" className="atlas-inline-action" onClick={(e) => { e.stopPropagation(); startEditIntegration(integration); }}>Edit</button>
+                            <button type="button" className="atlas-inline-action" onClick={(e) => { e.stopPropagation(); void handleToggleIntegration(integration.id, !integration.enabled); }}>{integration.enabled ? "Disable" : "Enable"}</button>
+                            <button type="button" className="atlas-inline-action atlas-prow__remove" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete ${integration.name}?`)) void handleDeleteIntegration(integration.id); }}>Delete</button>
+                          </div>
+                        </div>
+
+                        {/* Inline Detail + Edit Panel */}
+                        {isSelected ? (
+                          <div className="atlas-card atlas-card--soft" style={{ marginTop: 8, marginBottom: 12 }}>
+                            {editIntegrationOpen ? (
+                              /* Edit mode */
+                              <form onSubmit={(e) => { e.preventDefault(); void handleUpdateIntegration(integration.id); }}>
+                                <div className="atlas-card__eyebrow">Edit — {integration.name}</div>
+                                <div className="atlas-grid atlas-grid--2" style={{ marginTop: 12 }}>
+                                  <label className="atlas-assistant__composer-field">
+                                    <span className="atlas-assistant__composer-label">Name</span>
+                                    <input className="atlas-assistant__composer-value" value={editIntegrationForm.name} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, name: e.target.value })} />
+                                  </label>
+                                  <label className="atlas-assistant__composer-field">
+                                    <span className="atlas-assistant__composer-label">Transport</span>
+                                    <select className="atlas-assistant__composer-value" value={editIntegrationForm.transport} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, transport: e.target.value })}>
+                                      {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+                                    </select>
+                                  </label>
+                                </div>
+                                <label className="atlas-assistant__composer-field">
+                                  <span className="atlas-assistant__composer-label">Auth Methods (JSON)</span>
+                                  <textarea className="atlas-assistant__composer-value" value={editIntegrationForm.authMethods} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, authMethods: e.target.value })} rows={2} />
+                                </label>
+                                <label className="atlas-assistant__composer-field">
+                                  <span className="atlas-assistant__composer-label">Capabilities (JSON)</span>
+                                  <textarea className="atlas-assistant__composer-value" value={editIntegrationForm.capabilities} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, capabilities: e.target.value })} rows={2} />
+                                </label>
+                                <div className="atlas-chip-row" style={{ marginTop: 14 }}>
+                                  <button type="submit" className="atlas-action atlas-action--primary atlas-action--small">Save Changes</button>
+                                  <button type="button" className="atlas-action atlas-action--ghost atlas-action--small" onClick={() => setEditIntegrationOpen(false)}>Cancel</button>
+                                </div>
+                              </form>
+                            ) : (
+                              /* Detail view */
+                              <>
+                                <div className="atlas-card__eyebrow">Configuration</div>
+                                <div className="atlas-grid atlas-grid--2" style={{ marginTop: 8 }}>
+                                  <label className="atlas-assistant__composer-field">
+                                    <span className="atlas-assistant__composer-label">Base URL</span>
+                                    <input className="atlas-assistant__composer-value" value={integrationConfigForm.baseUrl} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, baseUrl: e.target.value })} placeholder="https://" />
+                                  </label>
+                                  <label className="atlas-assistant__composer-field">
+                                    <span className="atlas-assistant__composer-label">API Key</span>
+                                    <input className="atlas-assistant__composer-value" type="password" value={integrationConfigForm.apiKey} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, apiKey: e.target.value })} placeholder="Configure if needed" />
+                                  </label>
+                                </div>
+                                <div className="atlas-chip-row" style={{ marginTop: 8 }}>
+                                  <button type="button" className="atlas-action atlas-action--primary atlas-action--small" onClick={() => void handleSaveIntegrationConfig(integration.id)}>Save Config</button>
+                                </div>
+
+                                <div className="atlas-card__eyebrow" style={{ marginTop: 14 }}>Health</div>
+                                <div className="atlas-rows" style={{ marginTop: 4 }}>
+                                  <div className="atlas-row">
+                                    <div className="atlas-row__meta">
+                                      <div className="atlas-row__title">Status</div>
+                                    </div>
+                                    <span className={`atlas-badge ${health?.status === "healthy" ? "atlas-badge--green" : health?.status === "unconfigured" ? "atlas-badge--amber" : "atlas-badge--red"}`}>
+                                      {health?.status ?? "unknown"}
+                                    </span>
+                                  </div>
+                                  <div className="atlas-row">
+                                    <div className="atlas-row__meta">
+                                      <div className="atlas-row__title">Transport</div>
+                                      <div className="atlas-row__body">{integration.transport.toUpperCase()}</div>
+                                    </div>
+                                  </div>
+                                  <div className="atlas-row">
+                                    <div className="atlas-row__meta">
+                                      <div className="atlas-row__title">Capabilities</div>
+                                    </div>
+                                    <div className="atlas-chip-row">
+                                      {integration.capabilities.map((cap) => <span key={cap.capabilityId} className="atlas-chip atlas-chip--quiet">{cap.capabilityId} (p{cap.priority})</span>)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="atlas-chip-row" style={{ marginTop: 12 }}>
+                                  <button type="button" className="atlas-inline-action" onClick={() => startEditIntegration(integration)}>Edit</button>
+                                  <button type="button" className="atlas-inline-action" onClick={() => { selectIntegration(integration.id); }}>Close</button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            );
-          })}
-        </div>
-      </section>
+            ) : null}
+
+            {/* By Capability View */}
+            {integrationsView === "capability" ? (
+              <div className="atlas-rows">
+                {integrationCapabilities.length === 0 ? (
+                  <div className="atlas-card atlas-card--soft">
+                    <div className="atlas-card__body">No capabilities registered.</div>
+                  </div>
+                ) : (
+                  integrationCapabilities.map((cap) => {
+                    const mapped = integrations.filter((i) => i.capabilities.some((c) => c.capabilityId === cap.id));
+                    return (
+                      <div key={cap.id} className="atlas-mcp" style={{ marginBottom: 12 }}>
+                        <div className="atlas-mcp__head">
+                          <div className="atlas-mcp__mark" aria-hidden="true">{cap.name.slice(0, 1).toUpperCase()}</div>
+                          <div className="atlas-mcp__meta">
+                            <div className="atlas-mcp__name">{cap.name}</div>
+                            <div className="atlas-mcp__detail">{cap.category} · {mapped.length} integration{mapped.length !== 1 ? "s" : ""}</div>
+                          </div>
+                        </div>
+                        <div className="atlas-rows" style={{ marginTop: 4 }}>
+                          {mapped.length === 0 ? (
+                            <div className="atlas-micro" style={{ padding: "4px 8px" }}>No integrations mapped to this capability.</div>
+                          ) : (
+                            mapped.map((integration) => {
+                              const capLink = integration.capabilities.find((c) => c.capabilityId === cap.id);
+                              return (
+                                <div className="atlas-row" key={integration.id}>
+                                  <IntegrationAvatar integrationId={integration.id} name={integration.name} size="sm" decorative />
+                                  <div className="atlas-row__meta">
+                                    <div className="atlas-row__title">{integration.name}</div>
+                                    <div className="atlas-row__body">{integration.transport.toUpperCase()} · Auth: {integration.authMethods.map((m) => m.kind).join(", ")}</div>
+                                  </div>
+                                  <span className="atlas-badge atlas-badge--blue">Priority {capLink?.priority ?? "-"}</span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </section>
         </div>
       ) : null}
 
@@ -1436,7 +2086,7 @@ export function AtlasAdmin() {
         <div className="atlas-admin-panel">
       <section className="atlas-section">
         <div className="atlas-section__header">
-          <p className="atlas-section__eyebrow">MCP builder</p>
+          <p className="atlas-section__eyebrow">MCP Servers</p>
           <h2 className="atlas-section__title">Connected MCP servers</h2>
           <p className="atlas-section__copy">
             Add an endpoint and authentication, then Atlas discovers the tools and detects the
@@ -1866,6 +2516,8 @@ export function AtlasAdmin() {
       </section>
         </div>
       ) : null}
+
+      {activeTab === "logs" ? <LlmLogsPanel /> : null}
       </div>
     </div>
   );

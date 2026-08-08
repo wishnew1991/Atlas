@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
+import { prisma } from "@/lib/atlas/server/prisma";
+import { decryptSecret } from "@/lib/security/secrets";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -32,18 +34,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  const payload: unknown = await request.json();
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid body." }, { status: 400 });
+  }
 
   if (!isRecord(payload)) {
     return NextResponse.json({ error: "Invalid body." }, { status: 400 });
   }
 
   const provider = payload.provider;
-  const apiKey = payload.apiKey;
+  let apiKey = typeof payload.apiKey === "string" ? payload.apiKey : "";
+  const credentialId = typeof payload.credentialId === "string" ? payload.credentialId : undefined;
   const baseUrl = typeof payload.baseUrl === "string" ? payload.baseUrl : undefined;
 
-  if (typeof provider !== "string" || typeof apiKey !== "string") {
-    return NextResponse.json({ error: "provider and apiKey are required." }, { status: 400 });
+  if (typeof provider !== "string") {
+    return NextResponse.json({ error: "provider is required." }, { status: 400 });
+  }
+
+  // If apiKey is missing or masked, resolve it from the saved credential in DB
+  if (!apiKey || apiKey.includes("…") || apiKey.includes("••••") || apiKey.includes("...")) {
+    if (credentialId) {
+      const saved = await prisma.credential.findUnique({ where: { id: credentialId } });
+      if (saved?.apiKey) {
+        apiKey = decryptSecret(saved.apiKey);
+      }
+    } else {
+      const saved = await prisma.credential.findFirst({
+        where: { provider: provider as any },
+        orderBy: { createdAt: "desc" },
+      });
+      if (saved?.apiKey) {
+        apiKey = decryptSecret(saved.apiKey);
+      }
+    }
+  }
+
+  if (!apiKey || apiKey.includes("…") || apiKey.includes("••••") || apiKey.includes("...")) {
+    return NextResponse.json({ error: "A valid API key is required." }, { status: 400 });
   }
 
   const resolvedBase = normalizeBaseUrl(baseUrl || defaultBaseUrls[provider] || "");
@@ -56,8 +86,18 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`${resolvedBase}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+    // Google supports API key via query param and x-goog-api-key header
+    const isGoogle = provider === "google";
+    const fetchUrl = isGoogle
+      ? `${resolvedBase}/models?key=${encodeURIComponent(apiKey)}`
+      : `${resolvedBase}/models`;
+
+    const headers: Record<string, string> = isGoogle
+      ? { "x-goog-api-key": apiKey }
+      : { Authorization: `Bearer ${apiKey}` };
+
+    const response = await fetch(fetchUrl, {
+      headers,
       signal: controller.signal,
       cache: "no-store",
     });
@@ -79,7 +119,16 @@ export async function POST(request: Request) {
             .filter(isRecord)
             .map((entry) => (typeof entry.id === "string" ? entry.id : ""))
             .filter(Boolean)
-        : [];
+        : isRecord(data) && Array.isArray(data.models)
+          ? (data.models as unknown[])
+              .filter(isRecord)
+              .map((entry) => {
+                const name = typeof entry.name === "string" ? entry.name : "";
+                // Google returns "models/gemini-2.5-flash" — strip prefix
+                return name.replace(/^models\//, "");
+              })
+              .filter(Boolean)
+          : [];
 
     const models = Array.from(new Set(rawIds)).sort();
 

@@ -1,0 +1,45 @@
+{
+  "name": "Food — Happy Path Ordering",
+  "description": "Full food ordering flow from hunger to checkout",
+  "domain": "food",
+  "turns": [
+    {
+      "user": "I'm hungry",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me biryani restaurants near me",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "I want the first one",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Add chicken biryani to my cart",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Checkout",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

@@ -55,6 +55,24 @@ class InProcessQueue<T extends Record<string, unknown>> {
     });
   }
 
+  private stop(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  reset(): void {
+    this.stop();
+    for (const job of this.pending) {
+      job.reject(new Error("Queue reset"));
+    }
+    this.pending = [];
+    this.handler = null;
+    this.started = false;
+    this.active = 0;
+  }
+
   private pump() {
     if (!this.handler) return;
 
@@ -128,4 +146,8 @@ export async function enqueueExecutionStep(
   options?: { delayMs?: number; jobId?: string }
 ): Promise<{ jobId: string }> {
   return executionQueue.enqueue(data, options);
+}
+
+export function resetExecutionQueue(): void {
+  executionQueue.reset();
 }

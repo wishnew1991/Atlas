@@ -1,0 +1,37 @@
+{
+  "name": "Shopping — Product Search",
+  "description": "Find and compare products",
+  "domain": "shopping",
+  "turns": [
+    {
+      "user": "I need a new laptop",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me gaming laptops under 1 lakh",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Compare the first two options",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Add the cheaper one to my cart",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

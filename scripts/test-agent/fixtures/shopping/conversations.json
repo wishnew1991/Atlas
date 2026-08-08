@@ -1,0 +1,18 @@
+[
+  {
+    "description": "Find gaming laptops",
+    "steps": [
+      { "role": "user", "text": "Find gaming laptops" },
+      { "role": "assistant", "text": "Here are some gaming laptops..." },
+      { "role": "user", "text": "Show only Dell" },
+      { "role": "assistant", "text": "Filtering to Dell..." },
+      { "role": "user", "text": "Compare the first two" },
+      { "role": "assistant", "text": "Here's a comparison..." },
+      { "role": "user", "text": "Add the cheaper one" },
+      { "role": "assistant", "text": "Added to your cart." },
+      { "role": "user", "text": "Checkout" },
+      { "role": "assistant", "text": "Here's your order summary." },
+      { "role": "user", "text": "Yes" }
+    ]
+  }
+]

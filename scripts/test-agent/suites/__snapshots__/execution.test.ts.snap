@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Execution Engine — Snapshot > tool result snapshot for atlas_prepare_approval 1`] = `
+{
+  "action": ObjectContaining {
+    "id": Any<String>,
+  },
+  "data": Anything,
+  "message": Any<String>,
+  "usedGateway": false,
+}
+`;
+
+exports[`Execution Engine — Snapshot > tool result snapshot for atlas_search 1`] = `
+{
+  "data": Anything,
+  "message": Any<String>,
+  "usedGateway": true,
+}
+`;
+
+exports[`Execution Engine — Snapshot > tool result snapshot for web_search 1`] = `
+{
+  "data": Anything,
+  "message": Any<String>,
+  "usedGateway": true,
+}
+`;

@@ -1,0 +1,262 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Tool Registry — Golden Snapshot > getRegisteredTools snapshot 1`] = `
+[
+  {
+    "description": "Search the public web for current information, facts, news, or anything that benefits from live results. Use this freely for general knowledge questions, recent events, or when a fetch would improve the answer. Never use it for bookings, orders, or payments.",
+    "name": "web_search",
+    "paramNames": [
+      "query",
+    ],
+    "required": [
+      "query",
+    ],
+  },
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+    "paramNames": [
+      "domain",
+      "request",
+      "query",
+    ],
+    "required": [
+      "request",
+    ],
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+    "paramNames": [
+      "domain",
+      "request",
+    ],
+    "required": [
+      "domain",
+      "request",
+    ],
+  },
+  {
+    "description": "Show or set the delivery address. Call with no arguments to list saved addresses; call with \`reference\` when the user names or numbers an address. Only call this ONCE at the start — do NOT call it again if the conversation already confirms an address (e.g. 'Delivering to Chennai').",
+    "name": "food_set_address",
+    "paramNames": [
+      "reference",
+    ],
+    "required": [],
+  },
+  {
+    "description": "Search nearby restaurants that deliver a dish or cuisine. Returns name, rating, delivery ETA, and price. Call this when the user says what they want to eat (e.g. 'chicken biryani', 'pizza'). Do NOT list dishes before the user has picked a restaurant.",
+    "name": "food_find_restaurants",
+    "paramNames": [
+      "dish",
+    ],
+    "required": [
+      "dish",
+    ],
+  },
+  {
+    "description": "Choose a restaurant from the list just shown and automatically load its menu. Pass the user's words ('Meghana', 'the second one', '1').",
+    "name": "food_select_restaurant",
+    "paramNames": [
+      "reference",
+    ],
+    "required": [
+      "reference",
+    ],
+  },
+  {
+    "description": "Show the CURRENT restaurant's menu, grouped by category with prices, veg/non-veg and availability. Use \`page\` to show more categories when the user asks for more options. Use \`query\` ONLY to search for a specific dish WITHIN the already-selected restaurant. NEVER use this to discover restaurants — if the user has not yet picked a restaurant, call food_find_restaurants with the dish instead.",
+    "name": "food_browse_menu",
+    "paramNames": [
+      "page",
+      "query",
+    ],
+    "required": [],
+  },
+  {
+    "description": "Update the cart using the user's own words. Handles adding ('add Andhra chicken biryani', 'two gulab jamuns'), removing ('remove the Coke'), quantity changes ('make it two', 'add another biryani'), replacing ('replace it with mutton biryani') and clearing ('empty the cart'). Pass the instruction verbatim — do not translate it into IDs.",
+    "name": "food_update_cart",
+    "paramNames": [
+      "instruction",
+    ],
+    "required": [
+      "instruction",
+    ],
+  },
+  {
+    "description": "Show the current cart with live items and totals. Use when the user asks what's in their cart.",
+    "name": "food_view_cart",
+    "paramNames": [],
+    "required": [],
+  },
+  {
+    "description": "Produce the final order summary and the approval card the user must confirm. Call this ONLY when the user says they are done adding items (e.g. 'checkout', 'that's all', 'place the order'). This never places the order by itself — the user must confirm the approval card.",
+    "name": "food_checkout",
+    "paramNames": [],
+    "required": [],
+  },
+  {
+    "description": "Show or set the payment method for the order (e.g. 'Google Pay', 'cash').",
+    "name": "food_select_payment",
+    "paramNames": [
+      "reference",
+    ],
+    "required": [],
+  },
+  {
+    "description": "Cancel the in-progress food order and clear the cart. Use when the user says 'cancel the order' or 'never mind'.",
+    "name": "food_cancel_order",
+    "paramNames": [],
+    "required": [],
+  },
+  {
+    "description": "Explicitly remember the current food order (dish, restaurant, items) as the user's 'usual' so it can be replayed with a single request like 'order my usual'. Call when the user says 'remember this as my usual', 'make this my usual', or explicitly asks to save this order. Does not place or redo the order.",
+    "name": "food_save_usual",
+    "paramNames": [],
+    "required": [],
+  },
+  {
+    "description": "Replay the user's saved food routine: ask for their usual order with the words 'usual', 'the usual', 'my usual order', 'same as last time'. Prepares it and presents an approval card for confirmation — it never places the order without approval.",
+    "name": "food_order_usual",
+    "paramNames": [
+      "label",
+    ],
+    "required": [],
+  },
+  {
+    "description": "Respond to an Atlas-proposed routine suggestion. Call when the user answers a question like 'would you like me to remember your usual order?' with yes (accept) or no (decline). Does not place any order.",
+    "name": "routine_decision",
+    "paramNames": [
+      "accept",
+      "observationId",
+    ],
+    "required": [
+      "accept",
+      "observationId",
+    ],
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["calendar"]) snapshot 1`] = `
+[
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["communication"]) snapshot 1`] = `
+[
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["food"]) snapshot 1`] = `
+[
+  {
+    "description": "Show or set the delivery address. Call with no arguments to list saved addresses; call with \`reference\` when the user names or numbers an address. Only call this ONCE at the start — do NOT call it again if the conversation already confirms an address (e.g. 'Delivering to Chennai').",
+    "name": "food_set_address",
+  },
+  {
+    "description": "Search nearby restaurants that deliver a dish or cuisine. Returns name, rating, delivery ETA, and price. Call this when the user says what they want to eat (e.g. 'chicken biryani', 'pizza'). Do NOT list dishes before the user has picked a restaurant.",
+    "name": "food_find_restaurants",
+  },
+  {
+    "description": "Choose a restaurant from the list just shown and automatically load its menu. Pass the user's words ('Meghana', 'the second one', '1').",
+    "name": "food_select_restaurant",
+  },
+  {
+    "description": "Show the CURRENT restaurant's menu, grouped by category with prices, veg/non-veg and availability. Use \`page\` to show more categories when the user asks for more options. Use \`query\` ONLY to search for a specific dish WITHIN the already-selected restaurant. NEVER use this to discover restaurants — if the user has not yet picked a restaurant, call food_find_restaurants with the dish instead.",
+    "name": "food_browse_menu",
+  },
+  {
+    "description": "Update the cart using the user's own words. Handles adding ('add Andhra chicken biryani', 'two gulab jamuns'), removing ('remove the Coke'), quantity changes ('make it two', 'add another biryani'), replacing ('replace it with mutton biryani') and clearing ('empty the cart'). Pass the instruction verbatim — do not translate it into IDs.",
+    "name": "food_update_cart",
+  },
+  {
+    "description": "Show the current cart with live items and totals. Use when the user asks what's in their cart.",
+    "name": "food_view_cart",
+  },
+  {
+    "description": "Produce the final order summary and the approval card the user must confirm. Call this ONLY when the user says they are done adding items (e.g. 'checkout', 'that's all', 'place the order'). This never places the order by itself — the user must confirm the approval card.",
+    "name": "food_checkout",
+  },
+  {
+    "description": "Show or set the payment method for the order (e.g. 'Google Pay', 'cash').",
+    "name": "food_select_payment",
+  },
+  {
+    "description": "Cancel the in-progress food order and clear the cart. Use when the user says 'cancel the order' or 'never mind'.",
+    "name": "food_cancel_order",
+  },
+  {
+    "description": "Explicitly remember the current food order (dish, restaurant, items) as the user's 'usual' so it can be replayed with a single request like 'order my usual'. Call when the user says 'remember this as my usual', 'make this my usual', or explicitly asks to save this order. Does not place or redo the order.",
+    "name": "food_save_usual",
+  },
+  {
+    "description": "Replay the user's saved food routine: ask for their usual order with the words 'usual', 'the usual', 'my usual order', 'same as last time'. Prepares it and presents an approval card for confirmation — it never places the order without approval.",
+    "name": "food_order_usual",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["rides"]) snapshot 1`] = `
+[
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["shopping"]) snapshot 1`] = `
+[
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["travel"]) snapshot 1`] = `
+[
+  {
+    "description": "Search connected Atlas services (shopping, travel, food, rides, appointments) for addresses, menus, restaurants, hotels, options, availability, or prices. ALWAYS call this first for any request in those domains, even when the user has not provided a full address or item — the service returns what it can (for example saved addresses) so the conversation can continue. Required: domain and request.",
+    "name": "atlas_search",
+  },
+  {
+    "description": "Prepare an approval card ONLY after the user has clearly requested or selected an order, booking, or action through Atlas. Never execute the action yourself.",
+    "name": "atlas_prepare_approval",
+  },
+]
+`;
+
+exports[`Tool Registry — Golden Snapshot > getToolsForCapabilities(["web"]) snapshot 1`] = `
+[
+  {
+    "description": "Search the public web for current information, facts, news, or anything that benefits from live results. Use this freely for general knowledge questions, recent events, or when a fetch would improve the answer. Never use it for bookings, orders, or payments.",
+    "name": "web_search",
+  },
+]
+`;

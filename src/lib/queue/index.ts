@@ -29,7 +29,7 @@ export enum JobType {
 const queueOptions: QueueOptions = {
   connection: process.env.REDIS_URL 
     ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
-    : new Redis({ maxRetriesPerRequest: null }), // In-memory for development
+    : new Redis({ maxRetriesPerRequest: null, lazyConnect: true }), // In-memory for development
   defaultJobOptions: {
     attempts: 3,
     backoff: {

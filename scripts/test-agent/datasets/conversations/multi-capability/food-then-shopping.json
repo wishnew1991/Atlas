@@ -1,0 +1,29 @@
+{
+  "name": "Multi-Capability — Food then Shopping",
+  "description": "User switches from food to shopping mid-conversation",
+  "domain": "multi",
+  "turns": [
+    {
+      "user": "I want to order pizza",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Actually, never mind. Show me headphones instead",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "What wireless options do you have?",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

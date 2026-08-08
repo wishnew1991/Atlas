@@ -3,7 +3,6 @@ import "server-only";
 import { randomUUID } from "crypto";
 
 import { prisma } from "@/lib/atlas/server/prisma";
-import { isClerkConfigured } from "@/lib/atlas/server/auth";
 import { memoryService, type MemoryType } from "@/lib/atlas/memory/service";
 
 export type ProfileAddress = {
@@ -79,30 +78,16 @@ type AuthIdentity = {
   phone: string;
 };
 
-/** Pull name / email / phone from the signed-in Clerk account (sign-up source of truth). */
-async function identityFromClerk(): Promise<AuthIdentity | null> {
-  if (!isClerkConfigured()) return null;
+/**
+ * Pull name / email from the signed-in account (better-auth User table).
+ * The profile service receives the auth user id, so we can read the
+ * identity directly without a session round-trip.
+ */
+async function identityFromAuth(userId: string): Promise<AuthIdentity | null> {
   try {
-    const { currentUser } = await import("@clerk/nextjs/server");
-    const user = await currentUser();
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return null;
-
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-      (typeof user.fullName === "string" ? user.fullName.trim() : "") ||
-      "";
-    const email =
-      user.primaryEmailAddress?.emailAddress ||
-      user.emailAddresses[0]?.emailAddress ||
-      "";
-    const phone =
-      user.primaryPhoneNumber?.phoneNumber || user.phoneNumbers[0]?.phoneNumber || "";
-
-    return {
-      name,
-      email: email.trim(),
-      phone: phone.trim(),
-    };
+    return { name: user.name ?? "", email: user.email ?? "", phone: "" };
   } catch {
     return null;
   }
@@ -110,7 +95,7 @@ async function identityFromClerk(): Promise<AuthIdentity | null> {
 
 async function ensureProfile(userId: string) {
   const existing = await prisma.userProfile.findUnique({ where: { userId } });
-  const fromAuth = await identityFromClerk();
+  const fromAuth = await identityFromAuth(userId);
 
   if (existing) {
     // Fill blanks from sign-up/account once; never overwrite user edits.

@@ -1,0 +1,37 @@
+[
+  {
+    "scenario": "food preference recall",
+    "category": "food",
+    "memories": [
+      { "text": "I like Hyderabadi biryani", "type": "preference", "confidence": 0.9, "importance": 0.8 },
+      { "text": "I prefer spicy food", "type": "preference", "confidence": 0.7, "importance": 0.6 },
+      { "text": "Birthday dinner party next Friday", "type": "event", "confidence": 0.5, "importance": 0.5 }
+    ],
+    "query": "what food do I like",
+    "expectedRecall": ["I like Hyderabadi biryani", "I prefer spicy food"],
+    "expectedMiss": ["Birthday dinner party next Friday"]
+  },
+  {
+    "scenario": "travel preference recall",
+    "category": "travel",
+    "memories": [
+      { "text": "I prefer window seats on flights", "type": "preference", "confidence": 0.8, "importance": 0.7 },
+      { "text": "Favorite hotel is the Hilton Paris", "type": "travel", "confidence": 0.9, "importance": 0.8 },
+      { "text": "Vegan diet only", "type": "health", "confidence": 0.9, "importance": 0.5 }
+    ],
+    "query": "where should I stay when traveling",
+    "expectedRecall": ["Favorite hotel is the Hilton Paris"],
+    "expectedMiss": ["Vegan diet only"]
+  },
+  {
+    "scenario": "identity recall",
+    "category": "general",
+    "memories": [
+      { "text": "User lives in Chennai", "type": "identity", "confidence": 0.9, "importance": 0.9 },
+      { "text": "Software engineer at ABC Corp", "type": "work", "confidence": 0.8, "importance": 0.6 }
+    ],
+    "query": "where do I live",
+    "expectedRecall": ["User lives in Chennai"],
+    "expectedMiss": []
+  }
+]

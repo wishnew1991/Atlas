@@ -1,0 +1,42 @@
+[
+  {
+    "capability": "food",
+    "toolNames": [
+      "food_set_address",
+      "food_find_restaurants",
+      "food_select_restaurant",
+      "food_browse_menu",
+      "food_update_cart",
+      "food_view_cart",
+      "food_checkout",
+      "food_select_payment",
+      "food_cancel_order",
+      "food_save_usual",
+      "food_order_usual"
+    ]
+  },
+  {
+    "capability": "travel",
+    "toolNames": ["atlas_search", "atlas_prepare_approval"]
+  },
+  {
+    "capability": "shopping",
+    "toolNames": ["atlas_search", "atlas_prepare_approval"]
+  },
+  {
+    "capability": "rides",
+    "toolNames": ["atlas_search", "atlas_prepare_approval"]
+  },
+  {
+    "capability": "calendar",
+    "toolNames": ["atlas_search", "atlas_prepare_approval"]
+  },
+  {
+    "capability": "communication",
+    "toolNames": ["atlas_search", "atlas_prepare_approval"]
+  },
+  {
+    "capability": "web",
+    "toolNames": ["web_search"]
+  }
+]

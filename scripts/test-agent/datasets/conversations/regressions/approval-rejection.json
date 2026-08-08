@@ -1,0 +1,35 @@
+{
+  "name": "Failure — Approval Rejection",
+  "description": "User rejects an approval and conversation continues",
+  "domain": "food",
+  "turns": [
+    {
+      "user": "Order chicken biryani from Meghana",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Add it to cart and checkout",
+      "expect": {
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "No, cancel the order",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me biryani from Paradise instead",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

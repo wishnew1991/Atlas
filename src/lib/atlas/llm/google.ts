@@ -1,5 +1,31 @@
 import type { LlmAdapter, LlmChatOptions, LlmChunk, LlmMessage, LlmResult, LlmTool, LlmEmbedOptions, LlmEmbedResult } from "./types";
 
+const CHAT_TIMEOUT_MS = 25000;
+const EMBED_TIMEOUT_MS = 60000;
+
+function buildTimedSignal(signal: AbortSignal | undefined, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+
+  const onAbort = () => controller.abort();
+  let externalBound = false;
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else {
+      signal.addEventListener("abort", onAbort, { once: true });
+      externalBound = true;
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timer);
+      if (externalBound) signal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
 function toGoogleMessages(messages: LlmMessage[]) {
   return messages
     .filter((m) => m.role !== "system")
@@ -61,12 +87,21 @@ export const googleAdapter: LlmAdapter = {
       tools: options.tools?.length ? [toGoogleTools(options.tools)] : undefined,
     };
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
+    const { signal, cleanup } = buildTimedSignal(options.signal, CHAT_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+        cache: "no-store",
+      });
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
+    cleanup();
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -101,7 +136,24 @@ export const googleAdapter: LlmAdapter = {
       })
       .filter((tc) => tc.name.length > 0);
 
-    return { content: text, toolCalls };
+    const usageMetadata = isRecord(payload.usageMetadata) ? payload.usageMetadata : null;
+    const usage: LlmResult["usage"] =
+      usageMetadata &&
+      (typeof usageMetadata.promptTokenCount === "number" ||
+        typeof usageMetadata.candidatesTokenCount === "number")
+        ? {
+            promptTokens:
+              typeof usageMetadata.promptTokenCount === "number" ? usageMetadata.promptTokenCount : undefined,
+            completionTokens:
+              typeof usageMetadata.candidatesTokenCount === "number"
+                ? usageMetadata.candidatesTokenCount
+                : undefined,
+            totalTokens:
+              typeof usageMetadata.totalTokenCount === "number" ? usageMetadata.totalTokenCount : undefined,
+          }
+        : undefined;
+
+    return { content: text, toolCalls, usage };
   },
 
   async *streamChat(options: LlmChatOptions): AsyncIterable<LlmChunk> {
@@ -122,14 +174,23 @@ export const googleAdapter: LlmAdapter = {
     const results: number[][] = [];
     for (const text of inputs) {
       const url = `${baseUrl}/models/${options.model}:batchEmbedContents?key=${options.apiKey}`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requests: [{ model: `models/${options.model}`, content: { parts: [{ text }] } }],
-        }),
-        cache: "no-store",
-      });
+      const { signal, cleanup } = buildTimedSignal(undefined, EMBED_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requests: [{ model: `models/${options.model}`, content: { parts: [{ text }] } }],
+          }),
+          signal,
+          cache: "no-store",
+        });
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+      cleanup();
 
       if (!response.ok) {
         const errText = await response.text().catch(() => "");

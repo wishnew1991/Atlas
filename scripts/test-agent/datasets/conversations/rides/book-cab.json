@@ -1,0 +1,37 @@
+{
+  "name": "Rides — Book a Cab",
+  "description": "Search and book a ride",
+  "domain": "rides",
+  "turns": [
+    {
+      "user": "I need a cab to the airport",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me available rides",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "I'll take an Uber",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Book it now",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

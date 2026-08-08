@@ -1,15 +1,16 @@
 "use client";
 
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { AtlasCard } from "./atlas-card";
+import { IntegrationAvatar } from "@/components/atlas/integration-avatar";
 import {
   assistantCapabilities,
   bookingHistory,
-  connectedAccounts,
   paymentOptions,
   profileSummary,
   privacyControls,
 } from "@/lib/atlas/content";
-import { atlasMcpProviders } from "@/lib/atlas/mcp-registry";
 import { activeTasks, activityTimeline } from "@/lib/atlas/content";
 
 interface AssistantSettingsDrawerProps {
@@ -17,7 +18,31 @@ interface AssistantSettingsDrawerProps {
   onClose: () => void;
 }
 
+interface ConnectionSummary {
+  integrationId: string;
+  integrationName: string;
+  status: string;
+  capabilities: string[];
+}
+
 export function AssistantSettingsDrawer({ open, onClose }: AssistantSettingsDrawerProps) {
+  const [connections, setConnections] = useState<ConnectionSummary[]>([]);
+
+  const loadConnections = useCallback(async () => {
+    try {
+      const response = await fetch("/api/user/connections");
+      const payload = await response.json();
+      if (response.ok && Array.isArray(payload.connections)) {
+        setConnections(payload.connections);
+      }
+    } catch { /* best effort */ }
+  }, []);
+
+  useEffect(() => {
+    if (open) void loadConnections();
+  }, [open, loadConnections]);
+
+  const connectedCount = connections.filter((c) => c.status === "active").length;
   return (
     <>
       <button
@@ -42,8 +67,7 @@ export function AssistantSettingsDrawer({ open, onClose }: AssistantSettingsDraw
               <p className="atlas-hero__subtle">Settings</p>
               <h2 className="atlas-settings-drawer__title">Control center</h2>
               <p className="atlas-settings-drawer__copy">
-                Add MCPs, manage wallets, review history, and keep Atlas under
-                your control.
+                Manage payments, review history, and keep Atlas under your control.
               </p>
             </div>
             <button type="button" className="atlas-action atlas-action--ghost atlas-settings-drawer__close" onClick={onClose}>
@@ -54,26 +78,36 @@ export function AssistantSettingsDrawer({ open, onClose }: AssistantSettingsDraw
           <AtlasCard tone="soft" className="atlas-settings-drawer__card">
             <div className="atlas-mini-row">
               <div>
-                <div className="atlas-card__eyebrow">MCPs</div>
-                <div className="atlas-card__title">Add or manage providers</div>
-              </div>
-              <button type="button" className="atlas-action atlas-action--primary atlas-settings-drawer__inline-action">
-                Add MCP
-              </button>
-            </div>
-            <div className="atlas-rows">
-              {atlasMcpProviders.map((provider) => (
-                <div className="atlas-row" key={provider.id}>
-                  <div className="atlas-row__meta">
-                    <div className="atlas-row__title">{provider.name}</div>
-                    <div className="atlas-row__body">{provider.role}</div>
-                    <div className="atlas-row__body">{provider.source}</div>
-                  </div>
-                  <span className={`atlas-badge ${provider.readiness === "ready" ? "atlas-badge--green" : provider.readiness === "partial" ? "atlas-badge--amber" : "atlas-badge--red"}`}>
-                    {provider.readiness}
-                  </span>
+                <div className="atlas-card__eyebrow">Connections</div>
+                <div className="atlas-card__title">
+                  {connectedCount > 0 ? `${connectedCount} service${connectedCount !== 1 ? "s" : ""} connected` : "No services connected"}
                 </div>
-              ))}
+              </div>
+            </div>
+            {connections.length > 0 ? (
+              <div className="atlas-rows">
+                {connections.map((conn) => (
+                  <div className="atlas-row" key={conn.integrationId}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                      <IntegrationAvatar integrationId={conn.integrationId} name={conn.integrationName} size="sm" decorative />
+                      <div className="atlas-row__meta">
+                        <div className="atlas-row__title">{conn.integrationName}</div>
+                        <div className="atlas-row__body">{conn.capabilities.join(", ")}</div>
+                      </div>
+                    </div>
+                    <span className={`atlas-badge ${conn.status === "active" ? "atlas-badge--green" : "atlas-badge--red"}`}>
+                      {conn.status === "active" ? "Connected" : conn.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="atlas-card__body" style={{ marginTop: 4 }}>Connect services like Swiggy, Amazon, or Google from your Profile.</div>
+            )}
+            <div className="atlas-chip-row" style={{ marginTop: 12 }}>
+              <Link href="/profile" className="atlas-action atlas-action--primary atlas-action--small" onClick={onClose}>
+                Manage connections →
+              </Link>
             </div>
           </AtlasCard>
 
@@ -105,13 +139,6 @@ export function AssistantSettingsDrawer({ open, onClose }: AssistantSettingsDraw
                   </div>
                   <span className="atlas-badge atlas-badge--blue">Edit</span>
                 </div>
-              ))}
-            </div>
-            <div className="atlas-chip-row">
-              {connectedAccounts.map((item) => (
-                <span key={item.title} className="atlas-chip atlas-chip--quiet">
-                  {item.title}
-                </span>
               ))}
             </div>
           </AtlasCard>

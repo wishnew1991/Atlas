@@ -139,12 +139,12 @@ const TOOL_RULES: { category: ToolCategory; patterns: RegExp[]; namePatterns: Re
   {
     category: "shopping",
     namePatterns: [/product|cart|checkout|shop|shopping|price|catalog|store|inventory|buy|purchase/i],
-    patterns: [/product|cart|checkout|shop|shopping|price|catalog|store|inventory|amazon|flipkart/i],
+    patterns: [/product|cart|checkout|shop|shopping|price|catalog|store|inventory/i],
   },
   {
     category: "rides",
     namePatterns: [/ride|taxi|cab|uber|pickup|dropoff|chauffeur|route/i],
-    patterns: [/ride|rides|taxi|cab|uber|pickup|drop\s*off|chauffeur/i],
+    patterns: [/ride|rides|taxi|cab|pickup|drop\s*off|chauffeur/i],
   },
   {
     category: "calendar",

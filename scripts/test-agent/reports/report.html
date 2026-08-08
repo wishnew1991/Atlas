@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Atlas Report</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#0d1117;color:#c9d1d9;padding:24px}
+h1{color:#58a6ff;margin-bottom:8px}.ts{color:#8b949e;font-size:14px;margin-bottom:24px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.c{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
+.c h3{font-size:12px;color:#8b949e;text-transform:uppercase;margin-bottom:8px}
+.c .v{font-size:28px;font-weight:bold}.p{color:#3fb950}.f{color:#f85149}.s{color:#d2991d}
+table{width:100%;border-collapse:collapse;margin-bottom:24px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #30363d}
+th{color:#8b949e;font-size:11px;text-transform:uppercase}
+.bar{background:#21262d;border-radius:4px;height:20px;position:relative;margin:4px 0}
+.fill{background:#58a6ff;border-radius:4px;height:100%}
+.bar span{position:absolute;right:8px;top:2px;font-size:11px;color:#c9d1d9}
+.hs{font-size:64px;font-weight:bold;text-align:center;color:#3fb950}
+.sec{margin-bottom:24px}.sec h2{color:#58a6ff;margin-bottom:12px;border-bottom:1px solid #30363d;padding-bottom:8px}
+</style></head><body><h1>Atlas Validation Report</h1><div class="ts">2026-08-05T04:54:09.412Z</div>
+<div class="g">
+<div class="c"><h3>Health</h3><div class="hs">100</div></div>
+<div class="c"><h3>Tests</h3><div class="v p">329<span style="font-size:14px">/330</span></div></div>
+<div class="c"><h3>Failed</h3><div class="v f">0</div></div>
+<div class="c"><h3>Skipped</h3><div class="v s">1</div></div>
+<div class="c"><h3>Duration</h3><div class="v" style="color:#8b949e">2.07s</div></div>
+</div>
+<div class="sec"><h2>Suite Results</h2><table><tr><th>Suite</th><th>Tests</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Duration</th></tr>
+<tr><td>Infrastructure</td><td>17</td><td class="p">17</td><td class="f">0</td><td class="s">0</td><td>0.02s</td></tr><tr><td>Planner</td><td>51</td><td class="p">51</td><td class="f">0</td><td class="s">0</td><td>0.04s</td></tr><tr><td>Tool Registry</td><td>62</td><td class="p">62</td><td class="f">0</td><td class="s">0</td><td>0.05s</td></tr><tr><td>Memory</td><td>31</td><td class="p">31</td><td class="f">0</td><td class="s">0</td><td>0.03s</td></tr><tr><td>MCP Transport</td><td>18</td><td class="p">18</td><td class="f">0</td><td class="s">0</td><td>0.73s</td></tr><tr><td>Execution Engine</td><td>14</td><td class="p">14</td><td class="f">0</td><td class="s">0</td><td>0.02s</td></tr><tr><td>Food Domain</td><td>24</td><td class="p">24</td><td class="f">0</td><td class="s">0</td><td>0.09s</td></tr><tr><td>Shopping Domain</td><td>28</td><td class="p">28</td><td class="f">0</td><td class="s">0</td><td>0.06s</td></tr><tr><td>Behavioral Infra</td><td>38</td><td class="p">38</td><td class="f">0</td><td class="s">0</td><td>0.75s</td></tr><tr><td>Behavioral Replay</td><td>9</td><td class="p">8</td><td class="f">0</td><td class="s">1</td><td>0.20s</td></tr><tr><td>Diff Engine</td><td>21</td><td class="p">21</td><td class="f">0</td><td class="s">0</td><td>0.05s</td></tr><tr><td>Golden Datasets</td><td>17</td><td class="p">17</td><td class="f">0</td><td class="s">0</td><td>0.03s</td></tr></table></div>
+<div class="sec"><h2>AI Quality</h2><table><tr><th>Metric</th><th>Score</th><th>Status</th></tr>
+<tr><td>Planner Accuracy</td><td><div class="bar"><div class="fill" style="width:100%"></div><span>100%</span></div></td><td>✓</td></tr><tr><td>Tool Accuracy</td><td><div class="bar"><div class="fill" style="width:100%"></div><span>100%</span></div></td><td>✓</td></tr><tr><td>Memory Accuracy</td><td><div class="bar"><div class="fill" style="width:100%"></div><span>100%</span></div></td><td>✓</td></tr><tr><td>MCP Reliability</td><td><div class="bar"><div class="fill" style="width:100%"></div><span>100%</span></div></td><td>✓</td></tr><tr><td>Execution Reliability</td><td><div class="bar"><div class="fill" style="width:100%"></div><span>100%</span></div></td><td>✓</td></tr></table></div>
+<div class="sec"><h2>Capability Coverage</h2><table><tr><th>Capability</th><th>Coverage</th><th>Status</th></tr>
+<tr><td>Planner</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Tool Registry</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Memory</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>MCP Transport</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Execution Engine</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Food</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Shopping</td><td><div class="bar"><div class="fill" style="width:85%"></div><span>85%</span></div></td><td>✓</td></tr><tr><td>Travel</td><td><div class="bar"><div class="fill" style="width:0%"></div><span>0%</span></div></td><td>⚠</td></tr><tr><td>Rides</td><td><div class="bar"><div class="fill" style="width:0%"></div><span>0%</span></div></td><td>⚠</td></tr><tr><td>Appointments</td><td><div class="bar"><div class="fill" style="width:0%"></div><span>0%</span></div></td><td>⚠</td></tr></table></div></body></html>

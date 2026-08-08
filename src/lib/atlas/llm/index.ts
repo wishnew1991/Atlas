@@ -17,6 +17,10 @@ export function getLlmAdapter(provider: LlmProvider): LlmAdapter {
   return adapters[provider] ?? openAiAdapter;
 }
 
+export function setLlmAdapter(provider: LlmProvider, adapter: LlmAdapter): void {
+  adapters[provider] = adapter;
+}
+
 export async function chat(options: LlmChatOptions): Promise<LlmResult> {
   return getLlmAdapter(options.provider).chat(options);
 }

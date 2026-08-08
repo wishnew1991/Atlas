@@ -15,8 +15,6 @@ interface AtlasShellProps {
 }
 
 function AdminShell({ children }: { children: ReactNode }) {
-  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-
   return (
     <div className="atlas-app atlas-app--admin">
       <div className="atlas-shell atlas-shell--admin">
@@ -25,7 +23,7 @@ function AdminShell({ children }: { children: ReactNode }) {
             ← Back to app
           </Link>
           <div className="atlas-admin-topbar__account">
-            {clerkEnabled ? <AtlasAuthControls /> : <span className="atlas-micro">Local operator</span>}
+            <AtlasAuthControls />
           </div>
         </header>
         <main className="atlas-content atlas-content--admin">{children}</main>

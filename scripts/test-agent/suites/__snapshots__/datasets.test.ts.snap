@@ -1,0 +1,81 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Golden Datasets — Snapshots > "Appointments — Schedule Dentist" snapshot 1`] = `
+{
+  "domain": "appointments",
+  "name": "Appointments — Schedule Dentist",
+  "turns": 4,
+  "withExpectations": 4,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Failure — Approval Rejection" snapshot 1`] = `
+{
+  "domain": "food",
+  "name": "Failure — Approval Rejection",
+  "turns": 4,
+  "withExpectations": 4,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Failure — MCP Timeout Recovery" snapshot 1`] = `
+{
+  "domain": "food",
+  "name": "Failure — MCP Timeout Recovery",
+  "turns": 3,
+  "withExpectations": 3,
+  "withFaults": 2,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Food — Happy Path Ordering" snapshot 1`] = `
+{
+  "domain": "food",
+  "name": "Food — Happy Path Ordering",
+  "turns": 5,
+  "withExpectations": 5,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Multi-Capability — Food then Shopping" snapshot 1`] = `
+{
+  "domain": "multi",
+  "name": "Multi-Capability — Food then Shopping",
+  "turns": 3,
+  "withExpectations": 3,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Rides — Book a Cab" snapshot 1`] = `
+{
+  "domain": "rides",
+  "name": "Rides — Book a Cab",
+  "turns": 4,
+  "withExpectations": 4,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Shopping — Product Search" snapshot 1`] = `
+{
+  "domain": "shopping",
+  "name": "Shopping — Product Search",
+  "turns": 4,
+  "withExpectations": 4,
+  "withFaults": 0,
+}
+`;
+
+exports[`Golden Datasets — Snapshots > "Travel — Flight Search" snapshot 1`] = `
+{
+  "domain": "travel",
+  "name": "Travel — Flight Search",
+  "turns": 4,
+  "withExpectations": 4,
+  "withFaults": 0,
+}
+`;

@@ -1,0 +1,155 @@
+{
+  "timestamp": "2026-08-05T04:54:09.412Z",
+  "totalTests": 330,
+  "totalPassed": 329,
+  "totalFailed": 0,
+  "totalSkipped": 1,
+  "totalDuration": 2070,
+  "suites": [
+    {
+      "name": "Infrastructure",
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 20
+    },
+    {
+      "name": "Planner",
+      "tests": 51,
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 45
+    },
+    {
+      "name": "Tool Registry",
+      "tests": 62,
+      "passed": 62,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 50
+    },
+    {
+      "name": "Memory",
+      "tests": 31,
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 30
+    },
+    {
+      "name": "MCP Transport",
+      "tests": 18,
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 730
+    },
+    {
+      "name": "Execution Engine",
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 20
+    },
+    {
+      "name": "Food Domain",
+      "tests": 24,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 90
+    },
+    {
+      "name": "Shopping Domain",
+      "tests": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 55
+    },
+    {
+      "name": "Behavioral Infra",
+      "tests": 38,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 750
+    },
+    {
+      "name": "Behavioral Replay",
+      "tests": 9,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 1,
+      "duration": 200
+    },
+    {
+      "name": "Diff Engine",
+      "tests": 21,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 50
+    },
+    {
+      "name": "Golden Datasets",
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 30
+    }
+  ],
+  "health": {
+    "overallScore": 100,
+    "plannerAccuracy": 100,
+    "toolAccuracy": 100,
+    "memoryAccuracy": 100,
+    "mcpReliability": 100,
+    "executionReliability": 100
+  },
+  "coverage": {
+    "planner": 85,
+    "tools": 85,
+    "memory": 85,
+    "mcp": 85,
+    "execution": 85,
+    "food": 85,
+    "shopping": 85,
+    "travel": 0,
+    "rides": 0,
+    "appointments": 0
+  },
+  "history": [
+    {
+      "timestamp": "2026-08-05T02:26:07.979Z",
+      "tests": 245,
+      "passed": 245,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 1040,
+      "health": 100
+    },
+    {
+      "timestamp": "2026-08-05T02:15:10.670Z",
+      "tests": 217,
+      "passed": 217,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 985,
+      "health": 100
+    },
+    {
+      "timestamp": "2026-08-05T02:14:48.327Z",
+      "tests": 217,
+      "passed": 217,
+      "failed": 0,
+      "skipped": 0,
+      "duration": 985,
+      "health": 100
+    }
+  ]
+}

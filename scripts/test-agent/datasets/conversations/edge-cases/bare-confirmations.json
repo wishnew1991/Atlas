@@ -1,0 +1,35 @@
+{
+  "name": "Edge Cases — Bare Confirmations",
+  "description": "Tests bare 'yes', referential utterances, and slot fills",
+  "domain": "food",
+  "turns": [
+    {
+      "user": "Find biryani places",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "yes",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "the second one",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "add two",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

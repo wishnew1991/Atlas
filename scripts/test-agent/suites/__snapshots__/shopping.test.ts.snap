@@ -1,0 +1,24 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Shopping — Snapshots > shopping intent list snapshot 1`] = `
+[
+  "Buy a laptop",
+  "Order headphones",
+  "Find a monitor",
+  "Compare two phones",
+  "I need a new keyboard",
+  "Purchase a gaming mouse",
+  "Show me the best deals on tablets",
+  "Add a charger to my cart",
+  "Checkout my cart",
+  "Where can I buy a webcam",
+]
+`;
+
+exports[`Shopping — Snapshots > shopping search snapshot 1`] = `
+{
+  "data": Anything,
+  "message": Any<String>,
+  "usedGateway": true,
+}
+`;

@@ -9,6 +9,10 @@ const runners = new Map<string, RoutineRunner>();
  * (e.g. at module load / first use). This file stays small on purpose — it is
  * not an automation engine, just a lookup.
  */
+export function resetRunners(): void {
+  runners.clear();
+}
+
 export const routineRegistry = {
   registerRunner(runner: RoutineRunner): void {
     runners.set(runner.domain, runner);

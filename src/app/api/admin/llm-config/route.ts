@@ -2,16 +2,17 @@ import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/atlas/server/prisma";
+import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
+import { decryptSecret } from "@/lib/security/secrets";
 
-
-// Internal endpoint: returns the active LLM configuration for MCP servers.
-// Only accessible from localhost — used by Browser Use launcher script.
-export async function GET(request: NextRequest) {
-  const host = request.headers.get("host") ?? "";
-  const isLocal = host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("::1");
-
-  if (!isLocal) {
-    return NextResponse.json({ error: "Internal use only" }, { status: 403 });
+// Internal endpoint: returns the active LLM configuration for MCP servers /
+// the local Browser Use launcher script. Admin-authorized — the previous
+// localhost Host-header check was spoofable by any client.
+export async function GET(_request: NextRequest) {
+  try {
+    await requireAtlasAdmin();
+  } catch {
+    return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
   // Try the default model first (set in admin → Models tab)
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
   };
 
   return NextResponse.json({
-    api_key: cred.apiKey,
+    api_key: decryptSecret(cred.apiKey),
     base_url: baseUrls[cred.provider] ?? cred.baseUrl ?? "https://api.openai.com/v1",
     model: model.id,
     provider: cred.provider,

@@ -52,6 +52,10 @@ export function setCachedCapabilities(
   capabilityCache.set(serverId, { ...value, expiresAt: Date.now() + CAPABILITY_TTL_MS });
 }
 
+export function invalidateCapabilityCache(): void {
+  capabilityCache.clear();
+}
+
 export async function getEnabledServers(): Promise<AtlasMcpServer[]> {
   const servers = await listMcpServers();
   return servers.filter((server) => server.enabled);

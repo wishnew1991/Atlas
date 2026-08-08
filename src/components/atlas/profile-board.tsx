@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ConnectionsSection } from "./connections-section";
 
 type ProfileAddress = { id: string; label: string; line: string };
 type ProfilePayment = { id: string; kind: "upi" | "card"; label: string; value: string };
@@ -594,6 +595,8 @@ export function ProfileBoard() {
           </form>
         ) : null}
       </section>
+
+      <ConnectionsSection />
 
       <section className="atlas-profile-block">
         <div className="atlas-profile-block__head">

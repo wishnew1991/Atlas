@@ -132,9 +132,20 @@ export function cleanupRateLimits(): void {
   });
 }
 
-// Run cleanup every minute
+let _rateLimitTimer: ReturnType<typeof setInterval> | null = null;
 if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimits, 60 * 1000);
+  _rateLimitTimer = setInterval(cleanupRateLimits, 60 * 1000);
+}
+
+export function resetAllRateLimits(): void {
+  rateLimitStore.clear();
+}
+
+export function clearRateLimitTimer(): void {
+  if (_rateLimitTimer !== null) {
+    clearInterval(_rateLimitTimer);
+    _rateLimitTimer = null;
+  }
 }
 
 /**

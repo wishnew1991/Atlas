@@ -1,0 +1,98 @@
+[
+  {
+    "input": "I am hungry",
+    "history": [],
+    "capabilities": ["food"],
+    "isContinuation": false
+  },
+  {
+    "input": "I want to order biryani",
+    "history": [],
+    "capabilities": ["food"],
+    "isContinuation": false
+  },
+  {
+    "input": "Find me pizza near me",
+    "history": [],
+    "capabilities": ["food"],
+    "isContinuation": false
+  },
+  {
+    "input": "Book a flight to Paris",
+    "history": [],
+    "capabilities": ["travel"],
+    "isContinuation": false
+  },
+  {
+    "input": "I need a hotel in Mumbai",
+    "history": [],
+    "capabilities": ["travel"],
+    "isContinuation": false
+  },
+  {
+    "input": "Buy headphones",
+    "history": [],
+    "capabilities": ["shopping"],
+    "isContinuation": false
+  },
+  {
+    "input": "Order an iPhone",
+    "history": [],
+    "capabilities": ["shopping"],
+    "isContinuation": false
+  },
+  {
+    "input": "Call an Uber",
+    "history": [],
+    "capabilities": ["rides"],
+    "isContinuation": false
+  },
+  {
+    "input": "I need a cab",
+    "history": [],
+    "capabilities": ["rides"],
+    "isContinuation": false
+  },
+  {
+    "input": "Schedule a dentist appointment",
+    "history": [],
+    "capabilities": ["calendar"],
+    "isContinuation": false
+  },
+  {
+    "input": "What is photosynthesis",
+    "history": [],
+    "capabilities": ["web"],
+    "isContinuation": false
+  },
+  {
+    "input": "Tell me about black holes",
+    "history": [],
+    "capabilities": ["web"],
+    "isContinuation": false
+  },
+  {
+    "input": "Hi how are you",
+    "history": [],
+    "capabilities": ["none"],
+    "isContinuation": false
+  },
+  {
+    "input": "What can you do",
+    "history": [],
+    "capabilities": ["none"],
+    "isContinuation": false
+  },
+  {
+    "input": "send an email to John",
+    "history": [],
+    "capabilities": ["communication"],
+    "isContinuation": false
+  },
+  {
+    "input": "plan my vacation to Goa",
+    "history": [],
+    "capabilities": ["travel"],
+    "isContinuation": false
+  }
+]

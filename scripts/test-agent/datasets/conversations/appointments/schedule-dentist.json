@@ -1,0 +1,37 @@
+{
+  "name": "Appointments — Schedule Dentist",
+  "description": "Find and book a dentist appointment",
+  "domain": "appointments",
+  "turns": [
+    {
+      "user": "I need to see a dentist",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me available slots for tomorrow",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Take the 10 AM slot",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Book it",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

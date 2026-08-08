@@ -1,97 +1,48 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextFetchEvent, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const clerkConfigured = Boolean(
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
-);
-
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/welcome(.*)"]);
-const isApiRoute = createRouteMatcher(["/api(.*)"]);
-const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
-
-const USER_ID_COOKIE = "atlas-user-id";
-
-function isConfiguredAdmin(userId: string | null | undefined) {
-  if (!userId) return false;
-  const adminIds = (process.env.ATLAS_ADMIN_USER_IDS || "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  return adminIds.includes(userId);
-}
+const isApiRoute = (request: NextRequest) => request.nextUrl.pathname.startsWith("/api");
+const isAdminRoute = (request: NextRequest) => request.nextUrl.pathname.startsWith("/admin");
 
 function redirectToSignIn(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = "/sign-in";
-  url.search = "";
   return NextResponse.redirect(url);
 }
 
-function redirectToWelcome(request: NextRequest) {
-  const url = request.nextUrl.clone();
-  url.pathname = "/welcome";
-  url.search = "";
-  return NextResponse.redirect(url);
-}
+const GUEST_ID_COOKIE = "atlas-user-id";
+const SESSION_COOKIE = "better-auth.session_token";
 
-function redirectToApp(request: NextRequest) {
-  const url = request.nextUrl.clone();
-  url.pathname = "/chat";
-  url.search = "";
-  return NextResponse.redirect(url);
-}
-
-const clerk = clerkConfigured
-  ? clerkMiddleware(async (auth, request) => {
-      if (isApiRoute(request)) {
-        return NextResponse.next();
-      }
-
-      const { userId } = await auth();
-
-      if (isPublicRoute(request)) {
-        if (userId) {
-          return redirectToApp(request);
-        }
-        return NextResponse.next();
-      }
-
-      if (!userId) {
-        return redirectToSignIn(request);
-      }
-
-      if (isAdminRoute(request) && !isConfiguredAdmin(userId)) {
-        return redirectToApp(request);
-      }
-
-      return NextResponse.next();
-    })
-  : null;
-
-export default function middleware(request: NextRequest, event: NextFetchEvent) {
-  if (clerk) {
-    return clerk(request, event);
+// Issue a unique per-visitor identity cookie for unauthenticated requests so
+// guests never share a single backend identity (data isolation).
+function ensureGuestIdentity(request: NextRequest): NextResponse {
+  const response = NextResponse.next();
+  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const hasGuestId = Boolean(request.cookies.get(GUEST_ID_COOKIE)?.value);
+  if (!hasSession && !hasGuestId) {
+    response.cookies.set(GUEST_ID_COOKIE, crypto.randomUUID(), {
+      path: "/",
+      maxAge: 30 * 24 * 60 * 60,
+      sameSite: "lax",
+    });
   }
+  return response;
+}
 
+export default function middleware(request: NextRequest) {
   if (isApiRoute(request)) {
-    return NextResponse.next();
+    return ensureGuestIdentity(request);
   }
 
-  if (isPublicRoute(request)) {
-    return NextResponse.next();
-  }
-
+  // The session token is an opaque string, not a JWT, so the admin allowlist
+  // cannot be evaluated here (Edge middleware has no DB access). This only
+  // gates on "is signed in"; the real admin check runs server-side in the
+  // admin page and admin API routes (requireAtlasAdmin).
   if (isAdminRoute(request)) {
-    return new NextResponse("Not Found", { status: 404 });
+    if (!request.cookies.get(SESSION_COOKIE)?.value) return redirectToSignIn(request);
+    return ensureGuestIdentity(request);
   }
 
-  const hasSession = Boolean(request.cookies.get(USER_ID_COOKIE)?.value);
-
-  if (!hasSession) {
-    return redirectToWelcome(request);
-  }
-
-  return NextResponse.next();
+  return ensureGuestIdentity(request);
 }
 
 export const config = {

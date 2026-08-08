@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Memory — Snapshots > listForUser snapshot after lifecycle operations 1`] = `
+[
+  {
+    "status": "active",
+    "text": "Active memory A",
+    "type": "preference",
+  },
+  {
+    "status": "active",
+    "text": "Active memory B",
+    "type": "food",
+  },
+]
+`;
+
+exports[`Memory — Snapshots > recall result snapshot 1`] = `
+[
+  {
+    "confidence": 0.9,
+    "importance": 0.8,
+    "score": 0.392,
+    "text": "I like Hyderabadi biryani",
+    "type": "preference",
+  },
+  {
+    "confidence": 0.7,
+    "importance": 0.6,
+    "score": 0.083,
+    "text": "I prefer spicy food",
+    "type": "preference",
+  },
+]
+`;

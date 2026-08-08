@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MCP Transport — Snapshot > listTools returns expected tool set 1`] = `
+[
+  {
+    "description": "Search nearby restaurants by dish or cuisine",
+    "hasSchema": true,
+    "name": "search_restaurants",
+  },
+  {
+    "description": "Fetch a restaurant's full menu",
+    "hasSchema": true,
+    "name": "fetch_restaurant_menu",
+  },
+  {
+    "description": "Place an order at a restaurant",
+    "hasSchema": true,
+    "name": "place_order",
+  },
+  {
+    "description": "Search for products by name or category",
+    "hasSchema": true,
+    "name": "search_products",
+  },
+  {
+    "description": "Get detailed product information",
+    "hasSchema": true,
+    "name": "get_product_details",
+  },
+  {
+    "description": "Search for flights between cities",
+    "hasSchema": true,
+    "name": "search_flights",
+  },
+  {
+    "description": "Search for hotels in a city",
+    "hasSchema": true,
+    "name": "search_hotels",
+  },
+  {
+    "description": "Create a new payment request",
+    "hasSchema": true,
+    "name": "create_payment",
+  },
+  {
+    "description": "Check the status of a payment",
+    "hasSchema": true,
+    "name": "check_payment_status",
+  },
+]
+`;

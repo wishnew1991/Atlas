@@ -59,15 +59,22 @@ export interface LlmEmbedResult {
   embeddings: number[][];
 }
 
+export interface LlmUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export type LlmChunk =
   | { type: "token"; text: string }
   | { type: "tool_call"; call: LlmToolCall }
-  | { type: "done" };
+  | { type: "done"; usage?: LlmUsage };
 
 export interface LlmResult {
   content: string;
   toolCalls: LlmToolCall[];
   finishReason?: string;
+  usage?: LlmUsage;
 }
 
 export interface LlmAdapter {

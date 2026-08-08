@@ -1,0 +1,92 @@
+[
+  {
+    "name": "food_set_address",
+    "description": "Show or set the delivery address",
+    "params": ["reference"],
+    "required": []
+  },
+  {
+    "name": "food_find_restaurants",
+    "description": "Search nearby restaurants",
+    "params": ["dish"],
+    "required": ["dish"]
+  },
+  {
+    "name": "food_select_restaurant",
+    "description": "Choose a restaurant",
+    "params": ["reference"],
+    "required": ["reference"]
+  },
+  {
+    "name": "food_browse_menu",
+    "description": "Show the current restaurant's menu",
+    "params": ["page", "query"],
+    "required": []
+  },
+  {
+    "name": "food_update_cart",
+    "description": "Update the cart",
+    "params": ["instruction"],
+    "required": ["instruction"]
+  },
+  {
+    "name": "food_view_cart",
+    "description": "Show the current cart",
+    "params": [],
+    "required": []
+  },
+  {
+    "name": "food_checkout",
+    "description": "Produce the final order summary",
+    "params": [],
+    "required": []
+  },
+  {
+    "name": "food_select_payment",
+    "description": "Show or set the payment method",
+    "params": ["reference"],
+    "required": []
+  },
+  {
+    "name": "food_cancel_order",
+    "description": "Cancel the in-progress food order",
+    "params": [],
+    "required": []
+  },
+  {
+    "name": "food_save_usual",
+    "description": "Remember the current food order",
+    "params": [],
+    "required": []
+  },
+  {
+    "name": "food_order_usual",
+    "description": "Replay the user's saved food routine",
+    "params": ["label"],
+    "required": []
+  },
+  {
+    "name": "routine_decision",
+    "description": "Respond to a routine suggestion",
+    "params": ["accept", "observationId"],
+    "required": ["accept", "observationId"]
+  },
+  {
+    "name": "web_search",
+    "description": "Search the public web",
+    "params": ["query"],
+    "required": ["query"]
+  },
+  {
+    "name": "atlas_search",
+    "description": "Search connected Atlas services",
+    "params": ["domain", "request", "query"],
+    "required": ["request"]
+  },
+  {
+    "name": "atlas_prepare_approval",
+    "description": "Prepare an approval card",
+    "params": ["domain", "request"],
+    "required": ["domain", "request"]
+  }
+]

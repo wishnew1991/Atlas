@@ -13,15 +13,7 @@ import { wantsLiveRecommendationTools } from "@/lib/atlas/intent/memory-intent-c
  * domain/MCP-specific conditionals and lets new integrations register new
  * capabilities without touching the planner.
  */
-export type Capability =
-  | "food"
-  | "travel"
-  | "shopping"
-  | "rides"
-  | "calendar"
-  | "communication"
-  | "web"
-  | "none";
+export type Capability = import("@/lib/atlas/capabilities/types").CanonicalCapability;
 
 export const ALL_CAPABILITIES: Capability[] = [
   "food",
@@ -31,6 +23,10 @@ export const ALL_CAPABILITIES: Capability[] = [
   "calendar",
   "communication",
   "web",
+  "payments",
+  "email",
+  "documents",
+  "messaging",
   "none",
 ];
 

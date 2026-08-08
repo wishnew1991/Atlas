@@ -3,16 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-const USER_ID_COOKIE = "atlas-user-id";
 const USER_NAME_COOKIE = "atlas-user-name";
-
-function generateId() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 function setCookie(name: string, value: string, days = 30) {
   document.cookie = `${name}=${value}; path=/; max-age=${days * 86400}; samesite=lax`;
@@ -31,15 +22,12 @@ export function WelcomeScreen() {
     setSubmitting(true);
 
     try {
-      const userId = generateId();
-
       await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ op: "seed_identity", name: trimmed }),
       });
 
-      setCookie(USER_ID_COOKIE, userId);
       setCookie(USER_NAME_COOKIE, trimmed);
 
       router.replace("/chat");

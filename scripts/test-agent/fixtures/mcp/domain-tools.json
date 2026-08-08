@@ -1,0 +1,31 @@
+[
+  {
+    "domain": "food",
+    "tools": [
+      { "name": "search_restaurants", "description": "Search nearby restaurants by dish or cuisine", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } },
+      { "name": "fetch_restaurant_menu", "description": "Fetch a restaurant's full menu", "inputSchema": { "type": "object", "properties": { "restaurantId": { "type": "string" } }, "required": ["restaurantId"] } },
+      { "name": "place_order", "description": "Place an order at a restaurant", "inputSchema": { "type": "object", "properties": { "restaurantId": { "type": "string" }, "items": { "type": "array" } }, "required": ["restaurantId", "items"] } }
+    ]
+  },
+  {
+    "domain": "shopping",
+    "tools": [
+      { "name": "search_products", "description": "Search for products by name or category", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } },
+      { "name": "get_product_details", "description": "Get detailed product information", "inputSchema": { "type": "object", "properties": { "productId": { "type": "string" } }, "required": ["productId"] } }
+    ]
+  },
+  {
+    "domain": "travel",
+    "tools": [
+      { "name": "search_flights", "description": "Search for flights between cities", "inputSchema": { "type": "object", "properties": { "origin": { "type": "string" }, "destination": { "type": "string" }, "date": { "type": "string" } }, "required": ["origin", "destination"] } },
+      { "name": "search_hotels", "description": "Search for hotels in a city", "inputSchema": { "type": "object", "properties": { "city": { "type": "string" }, "checkIn": { "type": "string" }, "checkOut": { "type": "string" } }, "required": ["city"] } }
+    ]
+  },
+  {
+    "domain": "payments",
+    "tools": [
+      { "name": "create_payment", "description": "Create a new payment request", "inputSchema": { "type": "object", "properties": { "amount": { "type": "number" }, "currency": { "type": "string" } }, "required": ["amount"] } },
+      { "name": "check_payment_status", "description": "Check the status of a payment", "inputSchema": { "type": "object", "properties": { "paymentId": { "type": "string" } }, "required": ["paymentId"] } }
+    ]
+  }
+]

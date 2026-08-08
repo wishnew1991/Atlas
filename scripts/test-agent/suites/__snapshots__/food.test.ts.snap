@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Food — Snapshots > checkout snapshot 1`] = `
+{
+  "awaitingUser": true,
+  "reply": Any<String>,
+}
+`;
+
+exports[`Food — Snapshots > restaurant discovery snapshot 1`] = `
+{
+  "awaitingUser": true,
+  "reply": "Here's what's delivering biryani near you:
+
+1. **M",
+}
+`;

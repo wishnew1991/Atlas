@@ -1,0 +1,242 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Book a flight to Paris" 1`] = `
+{
+  "capabilities": [
+    "travel",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: travel.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Buy headphones" 1`] = `
+{
+  "capabilities": [
+    "shopping",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: shopping.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Call an Uber" 1`] = `
+{
+  "capabilities": [
+    "rides",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "chat",
+    "reason": "short greeting / small talk",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: Call an Uber",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Find me pizza near me" 1`] = `
+{
+  "capabilities": [
+    "food",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: food.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Hi how are you" 1`] = `
+{
+  "capabilities": [
+    "none",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "chat",
+    "reason": "short greeting / small talk",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: Hi how are you",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "I am hungry" 1`] = `
+{
+  "capabilities": [
+    "food",
+  ],
+  "intent": {
+    "confidence": "high",
+    "kind": "chat",
+    "reason": "food hint — offer help, do not call tools yet",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: food.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "I need a cab" 1`] = `
+{
+  "capabilities": [
+    "rides",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "chat",
+    "reason": "short greeting / small talk",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: rides.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "I need a hotel in Mumbai" 1`] = `
+{
+  "capabilities": [
+    "travel",
+  ],
+  "intent": {
+    "confidence": "low",
+    "kind": "chat",
+    "reason": "general conversation / knowledge",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: travel.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "I want to order biryani" 1`] = `
+{
+  "capabilities": [
+    "food",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: I want to order biryani",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Order an iPhone" 1`] = `
+{
+  "capabilities": [
+    "shopping",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: Order an iPhone",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Schedule a dentist appointment" 1`] = `
+{
+  "capabilities": [
+    "calendar",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: Schedule a dentist appointment",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "Tell me about black holes" 1`] = `
+{
+  "capabilities": [
+    "web",
+  ],
+  "intent": {
+    "confidence": "low",
+    "kind": "chat",
+    "reason": "general conversation / knowledge",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: Tell me about black holes",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "What can you do" 1`] = `
+{
+  "capabilities": [
+    "none",
+  ],
+  "intent": {
+    "confidence": "high",
+    "kind": "chat",
+    "reason": "identity question",
+  },
+  "isContinuation": false,
+  "reason": "Classifier (0.95): test fixture: What can you do",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "What is photosynthesis" 1`] = `
+{
+  "capabilities": [
+    "web",
+  ],
+  "intent": {
+    "confidence": "low",
+    "kind": "clarify",
+    "reason": "question that may need a follow-up",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: web.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "plan my vacation to Goa" 1`] = `
+{
+  "capabilities": [
+    "travel",
+  ],
+  "intent": {
+    "confidence": "low",
+    "kind": "chat",
+    "reason": "general conversation / knowledge",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: travel.",
+}
+`;
+
+exports[`Planner — Golden Fixtures (Snapshot) > snapshot: "send an email to John" 1`] = `
+{
+  "capabilities": [
+    "communication",
+    "communication",
+  ],
+  "intent": {
+    "confidence": "medium",
+    "kind": "tool",
+    "reason": "action verb present",
+  },
+  "isContinuation": false,
+  "reason": "Capabilities inferred from current message: communication, communication.",
+}
+`;

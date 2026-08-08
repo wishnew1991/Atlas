@@ -1,0 +1,120 @@
+name: Behavioral Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  behavioral-validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run component tests
+        run: npm run test:agent
+      
+      - name: Start Atlas server
+        run: |
+          npm run dev &
+          echo "Waiting for server to start..."
+          sleep 10
+          curl -f http://localhost:3001/api/health || exit 1
+      
+      - name: Run behavioral validation
+        env:
+          ATLAS_API_URL: http://localhost:3001
+          BEHAVIORAL_REGRESSION_THRESHOLD: 0.05
+          BEHAVIORAL_LATENCY_THRESHOLD: 1000
+          BEHAVIORAL_TOKEN_THRESHOLD: 500
+        run: |
+          npx tsx scripts/behavioral-validation.ts run \
+            --api-url $ATLAS_API_URL \
+            --format json \
+            --output behavioral-results.json
+      
+      - name: Run regression tests
+        env:
+          ATLAS_API_URL: http://localhost:3001
+        run: |
+          npx tsx scripts/behavioral-validation.ts batch-regression \
+            --api-url $ATLAS_API_URL \
+            --output regression-results.json
+      
+      - name: Generate HTML report
+        run: |
+          npx tsx scripts/behavioral-validation.ts run \
+            --api-url http://localhost:3001 \
+            --format html \
+            --output behavioral-report.html
+      
+      - name: Upload behavioral results
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavioral-results
+          path: |
+            behavioral-results.json
+            regression-results.json
+            behavioral-report.html
+      
+      - name: Check for regressions
+        run: |
+          node scripts/check-regressions.mjs regression-results.json
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('behavioral-results.json', 'utf8'));
+            const regression = JSON.parse(fs.readFileSync('regression-results.json', 'utf8'));
+            
+            const comment = `## Behavioral Validation Results
+            
+            ### Overall Results
+            - Total Datasets: ${results.totalDatasets}
+            - Passed: ${results.passedDatasets}
+            - Failed: ${results.failedDatasets}
+            - Success Rate: ${((results.passedDatasets / results.totalDatasets) * 100).toFixed(1)}%
+            
+            ### Regression Analysis
+            - Overall Regression: ${regression.overallRegression ? '❌ DETECTED' : '✅ NONE'}
+            - Latency Regression: ${regression.details.some(d => d.issues.some(i => i.includes('Latency'))) ? '❌ DETECTED' : '✅ NONE'}
+            - Token Usage Regression: ${regression.details.some(d => d.issues.some(i => i.includes('Token'))) ? '❌ DETECTED' : '✅ NONE'}
+            
+            ### Behavioral Metrics
+            - Planner Accuracy: ${results.metrics?.plannerAccuracy || 'N/A'}
+            - Tool Correctness: ${results.metrics?.toolCorrectness || 'N/A'}
+            - Memory Correctness: ${results.metrics?.memoryCorrectness || 'N/A'}
+            - Average Latency: ${results.metrics?.averageLatency || 'N/A'}ms
+            
+            ### Failed Datasets
+            ${regression.details.filter(d => !d.passed).map(d => `- ${d.datasetName}: ${d.issues.slice(0, 2).join(', ')}`).join('\n')}
+            
+            [View Full Report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+      
+      - name: Fail on regression
+        if: steps.check-for-regressions.outcome == 'failure'
+        run: exit 1

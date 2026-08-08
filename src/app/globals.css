@@ -3350,6 +3350,82 @@ select:focus-visible {
   animation: atlas-panel-in 240ms ease both;
 }
 
+.atlas-llm-log {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.atlas-llm-log__head,
+.atlas-llm-log__row {
+  display: grid;
+  grid-template-columns: 92px minmax(160px, 1fr) 100px 72px 76px minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.atlas-llm-log__head {
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.atlas-llm-log__head .atlas-llm-log__cell {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.atlas-llm-log__entry + .atlas-llm-log__entry {
+  border-top: 1px solid var(--line);
+}
+
+.atlas-llm-log__row {
+  font-size: 0.84rem;
+}
+
+.atlas-llm-log__row[data-failed="true"] {
+  background: var(--red-soft);
+}
+
+.atlas-llm-log__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-llm-log__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--faint);
+}
+
+.atlas-llm-log__error {
+  padding: 6px 14px 10px;
+  font-size: 0.76rem;
+  color: var(--red);
+  word-break: break-word;
+  background: var(--red-soft);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .atlas-llm-log__head {
+    display: none;
+  }
+
+  .atlas-llm-log__row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 12px 14px;
+  }
+}
+
+
 @media (max-width: 860px) {
   .atlas-admin {
     grid-template-columns: 1fr;
@@ -3593,6 +3669,76 @@ select:focus-visible {
   font-size: 1rem;
   font-weight: 800;
   box-shadow: 0 8px 16px rgba(16, 163, 127, 0.2);
+}
+
+/* ───────────────────────────────────────────
+   Integration Avatar
+   ─────────────────────────────────────────── */
+.atlas-avatar {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.atlas-avatar--xs {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+}
+
+.atlas-avatar--sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+}
+
+.atlas-avatar--md {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.atlas-avatar--lg {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 1.1rem;
+}
+
+.atlas-avatar--image {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  padding: 4px;
+}
+
+.atlas-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.atlas-avatar--fallback {
+  background: var(--gradient-brand);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(16, 163, 127, 0.25);
+}
+
+.atlas-avatar__letter {
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
+.atlas-avatar__generic {
+  width: 55%;
+  height: 55%;
+  color: currentColor;
 }
 
 .atlas-prow__meta {

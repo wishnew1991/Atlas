@@ -1,0 +1,37 @@
+{
+  "name": "Travel — Flight Search",
+  "description": "Search and compare flights",
+  "domain": "travel",
+  "turns": [
+    {
+      "user": "I need to fly to Delhi next week",
+      "expect": {
+        "shouldNotHaveTools": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Show me flights from Chennai",
+      "expect": {
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "I want a morning flight",
+      "expect": {
+        "continuation": true,
+        "shouldNotHaveAction": true,
+        "maxLatencyMs": 30000
+      }
+    },
+    {
+      "user": "Book the cheapest one",
+      "expect": {
+        "continuation": true,
+        "maxLatencyMs": 30000
+      }
+    }
+  ]
+}

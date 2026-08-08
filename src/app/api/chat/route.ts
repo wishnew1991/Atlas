@@ -5,6 +5,7 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import type { AtlasChatHistoryItem } from "@/lib/atlas/agent-contract";
 import { createExecutionFromChat, getExecutionResponse } from "@/lib/execution/manager";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
+import { LlmRequestError } from "@/lib/atlas/llm/errors";
 
 
 function isHistoryItem(value: unknown): value is AtlasChatHistoryItem {
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
   try {
     const actor = await getAtlasActor();
 
+    const { resolveConversation, appendConversationTurn } = await import("@/lib/atlas/conversation/persist");
+    const activeConversationId = (await resolveConversation(actor.userId, conversationId)).id;
+
     // Reset domain sessions only when the conversation changes (new chat).
     // Track last conversationId per user; clear food session on change.
     const { resetFoodSession, getLastConversationId, setLastConversationId } = await import("@/lib/atlas/mcp/food-session");
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     // Create execution from chat context (execution-centric transformation)
     const execution = await createExecutionFromChat({
-      conversationId,
+      conversationId: activeConversationId,
       message,
       history,
       userId: actor.userId,
@@ -94,13 +98,22 @@ export async function POST(request: NextRequest) {
 
     if (!wantsStream) {
       const response = await createAtlasReply(message, history, actor.userId, actor.capabilities, {
-        conversationId,
+        conversationId: activeConversationId,
         executionId: execution.id,
+      });
+
+      await appendConversationTurn({
+        conversationId: activeConversationId,
+        userMessage: message,
+        assistantReply: response.reply,
+        history,
+        meta: { executionId: execution.id },
       });
 
       // Enhance response with execution metadata
       const enhancedResponse = {
         ...response,
+        conversationId: activeConversationId,
         executionId: execution.id,
         executionStatus: response.executionStatus ?? execution.status,
       };
@@ -122,13 +135,16 @@ export async function POST(request: NextRequest) {
             status: execution.status,
           });
 
+          let replyText = "";
+          let completed = false;
+
           for await (const chunk of streamAtlasReply(
             message,
             history,
             actor.userId,
             actor.capabilities,
             request.signal,
-            { conversationId, executionId: execution.id }
+            { conversationId: activeConversationId, executionId: execution.id }
           )) {
             // Update the executionId in the streamed chunk if the core omitted it.
             if (chunk.executionId !== execution.id) {
@@ -149,7 +165,7 @@ export async function POST(request: NextRequest) {
                 detail: chunk.stage.detail,
                 durationMs: chunk.stage.durationMs,
                 runId: chunk.runId,
-                conversationId: chunk.conversationId,
+                conversationId: activeConversationId,
                 executionId: execution.id,
               });
             }
@@ -158,28 +174,44 @@ export async function POST(request: NextRequest) {
               send({
                 type: "meta",
                 runId: chunk.runId,
-                conversationId: chunk.conversationId ?? null,
+                conversationId: activeConversationId,
                 executionId: execution.id,
               });
             }
 
             if (chunk.text) {
+              replyText += chunk.text;
               send({ type: "token", text: chunk.text });
             }
 
             if (chunk.done) {
+              completed = true;
               send({
                 type: "done",
                 action: chunk.action ?? null,
                 runId: chunk.runId ?? null,
-                conversationId: chunk.conversationId ?? null,
+                conversationId: activeConversationId,
                 executionId: execution.id,
               });
             }
           }
+
+          if (completed) {
+            await appendConversationTurn({
+              conversationId: activeConversationId,
+              userMessage: message,
+              assistantReply: replyText,
+              history,
+              meta: { executionId: execution.id },
+            });
+          }
         } catch (error) {
           console.error("[api/chat] stream failed", error);
-          send({ type: "error", text: "Atlas could not process this request." });
+          if (error instanceof LlmRequestError) {
+            send({ type: "error", text: error.userCopy });
+          } else {
+            send({ type: "error", text: "Atlas could not process this request." });
+          }
         } finally {
           controller.close();
         }
