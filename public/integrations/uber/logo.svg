@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="12" fill="#090909"/>
+  <rect x="0.5" y="0.5" width="47" height="47" rx="11.5" fill="none" stroke="rgba(255,255,255,0.22)"/>
+  <text x="50%" y="38%" fill="#ffffff" font-family="system-ui, Inter, Arial, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="central">Uber</text>
+</svg>

@@ -6,9 +6,25 @@ import { useState } from "react";
 
 type AuthMode = "sign-in" | "sign-up";
 
-export function LocalAuthScreen({ mode }: { mode: AuthMode }) {
+interface LocalAuthScreenProps {
+  mode: AuthMode;
+  redirectTo?: string;
+  hideSignupLink?: boolean;
+  hideDevLogin?: boolean;
+  title?: string;
+}
+
+export function LocalAuthScreen({
+  mode,
+  redirectTo,
+  hideSignupLink = false,
+  hideDevLogin = false,
+  title,
+}: LocalAuthScreenProps) {
   const router = useRouter();
   const isSignIn = mode === "sign-in";
+  const signInRedirectTo = redirectTo ?? "/chat";
+  const signUpRedirectTo = redirectTo ?? "/welcome";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,7 +87,7 @@ export function LocalAuthScreen({ mode }: { mode: AuthMode }) {
           throw new Error(data.message || "Sign in failed");
         }
 
-        router.push("/chat");
+        router.push(signInRedirectTo);
         router.refresh();
       } else {
         const res = await fetch("/api/auth/sign-up/email", {
@@ -85,7 +101,7 @@ export function LocalAuthScreen({ mode }: { mode: AuthMode }) {
           throw new Error(data.message || "Sign up failed");
         }
 
-        router.push("/welcome");
+        router.push(signUpRedirectTo);
         router.refresh();
       }
     } catch (err: unknown) {
@@ -100,7 +116,7 @@ export function LocalAuthScreen({ mode }: { mode: AuthMode }) {
       <div className="atlas-auth-screen__panel">
         <span className="atlas-auth-screen__brand">Atlas</span>
         <h1 className="atlas-auth-screen__title">
-          {isSignIn ? "Welcome back" : "Create your account"}
+          {title ?? (isSignIn ? "Welcome back" : "Create your account")}
         </h1>
 
         {error ? (
@@ -148,32 +164,34 @@ export function LocalAuthScreen({ mode }: { mode: AuthMode }) {
           </button>
         </form>
 
-        <p className="atlas-auth-screen__switch">
-          {isSignIn ? (
-            <>
-              New here? <Link href="/sign-up">Sign up</Link>
-            </>
-          ) : (
-            <>
-              Already have an account? <Link href="/sign-in">Sign in</Link>
-            </>
-          )}
-        </p>
-
-        {isSignIn ? (
-          <div className="atlas-auth-screen__divider">
-            <span>dev</span>
-          </div>
+        {!hideSignupLink ? (
+          <p className="atlas-auth-screen__switch">
+            {isSignIn ? (
+              <>
+                New here? <Link href="/sign-up">Sign up</Link>
+              </>
+            ) : (
+              <>
+                Already have an account? <Link href="/sign-in">Sign in</Link>
+              </>
+            )}
+          </p>
         ) : null}
-        {isSignIn ? (
-          <button
-            type="button"
-            className="atlas-auth-screen__guest"
-            onClick={doDevLogin}
-            disabled={devLoading}
-          >
-            {devLoading ? "Logging in..." : "Dev Login →"}
-          </button>
+
+        {isSignIn && !hideDevLogin ? (
+          <>
+            <div className="atlas-auth-screen__divider">
+              <span>dev</span>
+            </div>
+            <button
+              type="button"
+              className="atlas-auth-screen__guest"
+              onClick={doDevLogin}
+              disabled={devLoading}
+            >
+              {devLoading ? "Logging in..." : "Dev Login →"}
+            </button>
+          </>
         ) : null}
       </div>
     </div>

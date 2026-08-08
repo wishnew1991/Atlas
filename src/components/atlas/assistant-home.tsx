@@ -17,7 +17,13 @@ import {
 } from "./icons";
 import { MarkdownText } from "./markdown-text";
 
-export function AssistantHome({ mode = "home" }: { mode?: "home" | "chat" }) {
+export function AssistantHome({
+  mode = "home",
+  userName = "",
+}: {
+  mode?: "home" | "chat";
+  userName?: string;
+}) {
   const router = useRouter();
   const chat = useAtlasChat();
   const voice = useVoice();
@@ -390,6 +396,11 @@ export function AssistantHome({ mode = "home" }: { mode?: "home" | "chat" }) {
                 <span className="atlas-micro"> — voice unavailable</span>
               ) : null}
             </div>
+            {userName.trim() ? (
+              <p className="atlas-chat-app__greeting" data-address-by-name>
+                Hi {userName.trim()}
+              </p>
+            ) : null}
             <p className="atlas-chat-app__tagline">
               Ask Atlas to search, compare, and prepare real-world actions — it always asks before
               spending.
@@ -566,6 +577,35 @@ export function AssistantHome({ mode = "home" }: { mode?: "home" | "chat" }) {
                     >
                       Change
                     </button>
+                  </div>
+                </div>
+              ) : null}
+              {message.connectionRequest ? (
+                <div className="atlas-connection-card">
+                  <div className="atlas-connection-card__eyebrow">
+                    Personal service connection required · {message.connectionRequest.capability}
+                  </div>
+                  <div className="atlas-connection-card__header">
+                    <span className="atlas-connection-card__icon" aria-hidden="true">
+                      {message.connectionRequest.icon || "🔌"}
+                    </span>
+                    <div className="atlas-connection-card__info">
+                      <div className="atlas-connection-card__title">
+                        Connect {message.connectionRequest.integrationName}
+                      </div>
+                      <div className="atlas-connection-card__desc">
+                        {message.connectionRequest.description ||
+                          `Connect your personal ${message.connectionRequest.integrationName} account to let Atlas execute this for you.`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="atlas-connection-card__actions">
+                    <Link
+                      href="/profile"
+                      className="atlas-connection-card__connect-btn"
+                    >
+                      Connect {message.connectionRequest.integrationName} →
+                    </Link>
                   </div>
                 </div>
               ) : null}

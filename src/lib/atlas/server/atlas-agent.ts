@@ -397,7 +397,13 @@ async function demoResponse(
   const result = await routeToolCall(domain, "search", { domain, request: message });
 
   if (result) {
-    return { reply: result.message, mode: "demo", toolsUsed: ["MCP"] };
+    const { sanitizeAssistantText } = await import("@/lib/atlas/server/agent/tools");
+    const cleanReply = sanitizeAssistantText(result.message);
+    return {
+      reply: cleanReply || "I found the relevant information for your request.",
+      mode: "demo",
+      toolsUsed: ["MCP"],
+    };
   }
 
   return {

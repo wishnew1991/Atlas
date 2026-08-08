@@ -11,7 +11,11 @@ export function AtlasAuthControls() {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await fetch("/api/auth/sign-out", { method: "POST" });
+      await fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
     } finally {
       router.push("/sign-in");
       router.refresh();

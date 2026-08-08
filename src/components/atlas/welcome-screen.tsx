@@ -30,7 +30,7 @@ export function WelcomeScreen() {
 
       setCookie(USER_NAME_COOKIE, trimmed);
 
-      router.replace("/chat");
+      router.replace("/");
     } catch {
       setSubmitting(false);
     }

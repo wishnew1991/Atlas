@@ -49,3 +49,26 @@ browser-use-venv/
 *.db
 *.db-journal
 .env
+
+# Local tooling & caches
+.opencode/
+.wrangler/
+
+# Audit / review artifacts (generated output and supporting scripts)
+findings/
+reports/
+retrace_findings.csv
+retrace_findings.json
+retrace_findings.log
+retrace_findings.md
+scripts/add-google-key.ts
+scripts/autonomous-audit.ts
+scripts/create-admin.ts
+scripts/retrace-audit.ts
+scripts/patch-audit.mjs
+scripts/refine-findings.mjs
+scripts/check-regressions.mjs
+
+# Root-level design notes
+foundermode-command.html
+foundermode-mobile.html

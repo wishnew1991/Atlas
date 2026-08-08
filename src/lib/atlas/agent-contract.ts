@@ -26,11 +26,22 @@ export interface AtlasPendingAction {
   fields: AtlasApprovalField[];
 }
 
+export interface AtlasConnectionRequest {
+  integrationId: string;
+  integrationName: string;
+  capability: string;
+  authMethod: "oauth" | "apikey" | "none" | string;
+  icon?: string;
+  description?: string;
+}
+
 export interface AtlasChatResponse {
   reply: string;
   mode: "live" | "demo";
   toolsUsed: string[];
   action?: AtlasPendingAction;
+  /** Additive — inline connector prompt when user needs to connect a personal service. */
+  connectionRequest?: AtlasConnectionRequest;
   /** Additive — persisted conversation id when available. */
   conversationId?: string;
   /** Additive — observability run id. */

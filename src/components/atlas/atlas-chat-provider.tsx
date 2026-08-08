@@ -14,11 +14,13 @@ import {
 import type {
   AtlasChatHistoryItem,
   AtlasPendingAction,
+  AtlasConnectionRequest,
 } from "@/lib/atlas/agent-contract";
 
 export type ChatMessage = AtlasChatHistoryItem & {
   id: string;
   action?: AtlasPendingAction;
+  connectionRequest?: AtlasConnectionRequest;
   /** A naturally-discovered routine Atlas is proposing the user confirm. */
   routineSuggestion?: {
     observationId: string;
@@ -305,6 +307,7 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
       let buffer = "";
       let mode: "live" | "demo" = "demo";
       let action: AtlasPendingAction | undefined;
+      let connectionRequest: AtlasConnectionRequest | undefined;
       let sawTokens = false;
 
       setChatMessages((current) => [...current, { id: assistantId, role: "assistant", text: "" }]);
@@ -327,6 +330,7 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
             type: string;
             text?: string;
             action?: AtlasPendingAction;
+            connectionRequest?: AtlasConnectionRequest;
             error?: string;
             stage?: string;
             label?: string;
@@ -387,12 +391,17 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
             });
           } else if (event.type === "token" && event.text) {
             sawTokens = true;
+            const cleanToken = event.text
+              .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+              .replace(/<function[_\w=]*>[\s\S]*?<\/function[_\w]*>/gi, "")
+              .replace(/<parameters>[\s\S]*?<\/parameters>/gi, "");
             setChatMessages((current) =>
-              current.map((msg) => (msg.id === assistantId ? { ...msg, text: msg.text + event.text } : msg))
+              current.map((msg) => (msg.id === assistantId ? { ...msg, text: msg.text + cleanToken } : msg))
             );
           } else if (event.type === "done") {
             mode = "live";
             action = event.action ?? undefined;
+            connectionRequest = event.connectionRequest ?? undefined;
           } else if (event.type === "error") {
             setChatMessages((current) =>
               current.map((msg) =>
@@ -416,15 +425,22 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
 
       setRuntimeMode(mode);
       setChatMessages((current) =>
-        current.map((msg) =>
-          msg.id === assistantId
-            ? {
-                ...msg,
-                action,
-                text: msg.text || (sawTokens ? msg.text : "I'm ready to help.") || "I'm ready to help.",
-              }
-            : msg
-        )
+        current.map((msg) => {
+          if (msg.id !== assistantId) return msg;
+          const cleanText = msg.text
+            .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+            .replace(/<function[_\w=]*>[\s\S]*?<\/function[_\w]*>/gi, "")
+            .replace(/<parameters>[\s\S]*?<\/parameters>/gi, "")
+            .replace(/<\/?(tool_call|function|parameters|mcp__[\w_.:-]+)>/gi, "")
+            .trim();
+
+          return {
+            ...msg,
+            action,
+            connectionRequest,
+            text: cleanText || "Here is what I found for your request.",
+          };
+        })
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {

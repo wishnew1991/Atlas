@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="12" fill="#17171B"/>
+  <rect x="0.5" y="0.5" width="47" height="47" rx="11.5" fill="none" stroke="rgba(255,255,255,0.14)"/>
+  <text x="50%" y="42%" fill="#ffffff" font-family="system-ui, Inter, Arial, sans-serif" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="central">amazon</text>
+  <path d="M14 29.5c6.5 4 13.5 4 20.5-.6" fill="none" stroke="#FF9900" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M32 27.5l2.5 1.8 2.5-1.8M32 28.2v-3.4" fill="none" stroke="#FF9900" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="50%" y="33%" fill="#FF9900" font-family="system-ui, Inter, Arial, sans-serif" font-size="6.5" font-weight="400" text-anchor="middle" dominant-baseline="central">prime</text>
+</svg>

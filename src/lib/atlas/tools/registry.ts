@@ -561,6 +561,29 @@ export async function executeTool(
   const tool = tools.find((entry) => entry.name === name);
 
   if (!tool) {
+    // If it is a web search or browser navigation attempt, fall back to webSearchTool
+    if (
+      name.includes("navigate") ||
+      name.includes("search") ||
+      name.includes("browse") ||
+      name.includes("fetch") ||
+      name.includes("browser") ||
+      name.includes("run_task")
+    ) {
+      const query = stringArg(
+        args.query,
+        stringArg(
+          args.url,
+          stringArg(args.request, stringArg(args.task, stringArg(args.prompt, stringArg(args.instruction))))
+        )
+      );
+      if (query) {
+        return await webSearchTool.execute(
+          { query: query.replace(/^https?:\/\/[^/]+\/\??/i, "").replace(/[+%]/g, " ") },
+          ctx
+        );
+      }
+    }
     return { message: "That tool is not available to Atlas.", data: {}, usedGateway: false };
   }
 

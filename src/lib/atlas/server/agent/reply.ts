@@ -4,6 +4,7 @@ import type {
   AtlasChatHistoryItem,
   AtlasChatResponse,
   AtlasPendingAction,
+  AtlasConnectionRequest,
 } from "@/lib/atlas/agent-contract";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import type { LlmProvider } from "@/lib/atlas/llm";
@@ -31,6 +32,7 @@ export type ModelChain = {
 export type AtlasStreamChunk = {
   text?: string;
   action?: AtlasPendingAction;
+  connectionRequest?: AtlasConnectionRequest;
   done?: boolean;
   error?: string;
   stage?: StageEvent;

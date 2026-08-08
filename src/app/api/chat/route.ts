@@ -180,8 +180,14 @@ export async function POST(request: NextRequest) {
             }
 
             if (chunk.text) {
-              replyText += chunk.text;
-              send({ type: "token", text: chunk.text });
+              const sanitizedChunk = chunk.text
+                .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+                .replace(/<function[_\w=]*>[\s\S]*?<\/function[_\w]*>/gi, "")
+                .replace(/<parameters>[\s\S]*?<\/parameters>/gi, "");
+              if (sanitizedChunk) {
+                replyText += sanitizedChunk;
+                send({ type: "token", text: sanitizedChunk });
+              }
             }
 
             if (chunk.done) {
@@ -189,6 +195,7 @@ export async function POST(request: NextRequest) {
               send({
                 type: "done",
                 action: chunk.action ?? null,
+                connectionRequest: chunk.connectionRequest ?? null,
                 runId: chunk.runId ?? null,
                 conversationId: activeConversationId,
                 executionId: execution.id,

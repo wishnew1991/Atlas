@@ -6,10 +6,8 @@ import { prisma } from "@/lib/atlas/server/prisma";
 
 export default async function ChatPage() {
   const actor = await getAtlasActor();
-  if (actor.isAuthenticated) {
-    const profile = await prisma.userProfile.findUnique({ where: { userId: actor.userId } });
-    if (!profile) redirect("/welcome");
-  }
+  const profile = await prisma.userProfile.findUnique({ where: { userId: actor.userId } });
+  if (!profile?.name.trim()) redirect("/welcome");
 
-  return <AssistantHome mode="chat" />;
+  return <AssistantHome mode="chat" userName={profile.name} />;
 }

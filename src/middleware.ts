@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const isApiRoute = (request: NextRequest) => request.nextUrl.pathname.startsWith("/api");
 const isAdminRoute = (request: NextRequest) => request.nextUrl.pathname.startsWith("/admin");
+const isAdminLoginRoute = (request: NextRequest) => request.nextUrl.pathname === "/admin/login";
 
-function redirectToSignIn(request: NextRequest) {
+function redirectToAdminLogin(request: NextRequest) {
   const url = request.nextUrl.clone();
-  url.pathname = "/sign-in";
+  url.pathname = "/admin/login";
   return NextResponse.redirect(url);
 }
 
@@ -38,7 +39,10 @@ export default function middleware(request: NextRequest) {
   // gates on "is signed in"; the real admin check runs server-side in the
   // admin page and admin API routes (requireAtlasAdmin).
   if (isAdminRoute(request)) {
-    if (!request.cookies.get(SESSION_COOKIE)?.value) return redirectToSignIn(request);
+    if (!request.cookies.get(SESSION_COOKIE)?.value) {
+      // /admin/login is itself the admin sign-in page — let it render.
+      return isAdminLoginRoute(request) ? ensureGuestIdentity(request) : redirectToAdminLogin(request);
+    }
     return ensureGuestIdentity(request);
   }
 

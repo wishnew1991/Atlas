@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ConnectionsSection } from "./connections-section";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type ProfileAddress = { id: string; label: string; line: string };
 type ProfilePayment = { id: string; kind: "upi" | "card"; label: string; value: string };
@@ -39,11 +41,13 @@ function initialsFor(name: string, email: string) {
 }
 
 export function ProfileBoard() {
+  const router = useRouter();
+  const { addToast } = useToast();
+  const [signingOut, setSigningOut] = useState(false);
   const [profile, setProfile] = useState<ProfileSnapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -103,16 +107,9 @@ export function ProfileBoard() {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
   const patch = async (body: Record<string, unknown>) => {
     setSaving(true);
     setError(null);
-    setNotice(null);
     try {
       const response = await fetch("/api/profile", {
         method: "PATCH",
@@ -137,7 +134,7 @@ export function ProfileBoard() {
           ? (payload as { profile: ProfileSnapshot }).profile
           : profile;
       applyProfile(next);
-      setNotice("Saved");
+      addToast("Saved");
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -213,7 +210,23 @@ export function ProfileBoard() {
   if (loading) {
     return (
       <div className="atlas-page atlas-page--board atlas-profile">
-        <p className="atlas-board-empty">Loading profile…</p>
+        <div className="atlas-profile__skeleton" aria-hidden="true">
+          <div className="atlas-profile__skeleton-hero">
+            <span />
+            <div>
+              <em />
+              <em />
+            </div>
+          </div>
+          <div className="atlas-profile__skeleton-block">
+            <em />
+            <span />
+          </div>
+          <div className="atlas-profile__skeleton-block">
+            <em />
+            <span />
+          </div>
+        </div>
       </div>
     );
   }
@@ -232,11 +245,6 @@ export function ProfileBoard() {
           </p>
         </div>
         <div className="atlas-profile-hero__aside">
-          {notice ? (
-            <span className="atlas-profile__notice" role="status">
-              {notice}
-            </span>
-          ) : null}
           <button
             type="button"
             className="atlas-action atlas-action--ghost atlas-profile-hero__refresh"
@@ -244,6 +252,32 @@ export function ProfileBoard() {
             onClick={() => void refresh()}
           >
             Refresh
+          </button>
+          <button
+            type="button"
+            className="atlas-action atlas-action--ghost atlas-profile-hero__signout"
+            disabled={signingOut}
+            onClick={async () => {
+              if (signingOut) return;
+              setSigningOut(true);
+              try {
+                await fetch("/api/auth/sign-out", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: "{}",
+                });
+              } catch {
+                /* sign out still proceeds client-side */
+              }
+              // Drop the guest identity too so the consumer app re-enters the
+              // welcome/naming flow instead of recognizing the previous guest.
+              document.cookie = "atlas-user-id=; path=/; max-age=0";
+              document.cookie = "atlas-user-name=; path=/; max-age=0";
+              router.push("/welcome");
+              router.refresh();
+            }}
+          >
+            {signingOut ? "Signing out…" : "Sign out"}
           </button>
         </div>
       </header>

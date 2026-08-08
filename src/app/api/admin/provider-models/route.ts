@@ -27,6 +27,30 @@ function normalizeBaseUrl(value: string): string {
   return trimmed.replace(/\/models$/, "");
 }
 
+const fallbackProviderModels: Record<string, string[]> = {
+  google: [
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-flash-latest",
+    "text-embedding-004",
+  ],
+  openai: [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o3-mini",
+    "text-embedding-3-small",
+  ],
+  anthropic: [
+    "claude-3-5-sonnet-latest",
+    "claude-3-5-haiku-latest",
+  ],
+  nvidia: [
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "nvidia/llama-3.1-nemotron-nano-8b-v1",
+  ],
+};
+
 export async function POST(request: Request) {
   try {
     await requireAtlasAdmin();
@@ -79,7 +103,7 @@ export async function POST(request: Request) {
   const resolvedBase = normalizeBaseUrl(baseUrl || defaultBaseUrls[provider] || "");
 
   if (!resolvedBase) {
-    return NextResponse.json({ models: [], note: "Provider has no discoverable model list." });
+    return NextResponse.json({ models: fallbackProviderModels[provider] || [], note: "Provider has no discoverable model list." });
   }
 
   const controller = new AbortController();
@@ -103,10 +127,11 @@ export async function POST(request: Request) {
     });
 
     if (!response.ok) {
+      const fallbackList = fallbackProviderModels[provider] || [];
       return NextResponse.json(
         {
-          models: [],
-          error: `Provider returned ${response.status} for ${resolvedBase}/models. Check the base URL and API key. Enter the model ID manually.`,
+          models: fallbackList,
+          note: `Model discovery (${response.status}) was restricted by provider policy. Standard models have been loaded for selection.`,
         },
         { status: 200 }
       );

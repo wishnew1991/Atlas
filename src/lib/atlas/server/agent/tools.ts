@@ -17,6 +17,80 @@ export function parseToolArgs(raw: string): Record<string, unknown> {
 }
 
 export function extractToolCallFromContent(content: string): LlmToolCall | null {
+  // Check for any <tool_call> block (handles any opening/closing tag style)
+  const toolCallBlock = content.match(/<tool_call>([\s\S]*?)<\/tool_call>/i);
+  if (toolCallBlock) {
+    const inner = toolCallBlock[1];
+    const nameMatch =
+      inner.match(/<function[=_\s]+(?:name=)?["']?([\w_.:-]+)["']?>/i) ||
+      inner.match(/<function_name>([\w_.:-]+)<\/function_name>/i) ||
+      inner.match(/<([\w_.:-]+)>/i);
+
+    if (nameMatch) {
+      const rawName = nameMatch[1];
+      const name =
+        rawName.includes("search") || rawName.includes("weather")
+          ? "web_search"
+          : rawName.replace(/^mcp__.*?__/, "");
+
+      const args: Record<string, unknown> = {};
+      const xmlParamRe = /<parameter=([\w_]+)>\s*([\s\S]*?)\s*<\/parameter>/gi;
+      let m;
+      while ((m = xmlParamRe.exec(inner)) !== null) {
+        const key = m[1];
+        const val = m[2].trim();
+        args[key] = /^\d+$/.test(val) ? Number(val) : val;
+      }
+
+      const paramJson = inner.match(/<parameters>([\s\S]*?)<\/parameters>/i);
+      if (paramJson) {
+        try {
+          Object.assign(args, JSON.parse(paramJson[1].trim()));
+        } catch {
+          args.query = paramJson[1].trim();
+        }
+      }
+
+      return { id: crypto.randomUUID(), name, arguments: JSON.stringify(args) };
+    }
+  }
+
+  // Format 1: <function=name><parameter=k>v</parameter></function>
+  const xmlFunc1 = content.match(/<function=([\w_.:-]+)>/) || content.match(/<function\s+name=["']?([\w_.:-]+)["']?>/);
+  if (xmlFunc1) {
+    const rawName = xmlFunc1[1];
+    const name =
+      rawName.includes("web_search") || rawName.includes("brave_search") || rawName.includes("google_search") || rawName.includes("search")
+        ? "web_search"
+        : rawName.replace(/^mcp__.*?__/, "");
+    const args: Record<string, unknown> = {};
+    const xmlParamRe = /<parameter=([\w_]+)>\s*([\s\S]*?)\s*<\/parameter>/g;
+    let m;
+    while ((m = xmlParamRe.exec(content)) !== null) {
+      const key = m[1];
+      const val = m[2].trim();
+      args[key] = /^\d+$/.test(val) ? Number(val) : val;
+    }
+    return { id: crypto.randomUUID(), name, arguments: JSON.stringify(args) };
+  }
+
+  // Format 2: <function_name>name</function_name><parameters>{...}</parameters>
+  const xmlFunc2 = content.match(/<function_name>([\w_.:-]+)<\/function_name>/);
+  if (xmlFunc2) {
+    const rawName = xmlFunc2[1];
+    const name = rawName.includes("search") ? "web_search" : rawName.replace(/^mcp__.*?__/, "");
+    const paramMatch = content.match(/<parameters>([\s\S]*?)<\/parameters>/);
+    let args: Record<string, unknown> = {};
+    if (paramMatch) {
+      try {
+        args = JSON.parse(paramMatch[1].trim());
+      } catch {
+        args = { query: paramMatch[1].trim() };
+      }
+    }
+    return { id: crypto.randomUUID(), name, arguments: JSON.stringify(args) };
+  }
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
@@ -35,27 +109,21 @@ export function extractToolCallFromContent(content: string): LlmToolCall | null 
     }
   }
 
-  const xmlFunc = content.match(/<function=([\w_]+)>/);
-  if (xmlFunc) {
-    const name = xmlFunc[1];
-    const args: Record<string, unknown> = {};
-    const xmlParamRe = /<parameter=(\w+)>\s*([\s\S]*?)\s*<\/parameter>/g;
-    let m;
-    while ((m = xmlParamRe.exec(content)) !== null) {
-      const key = m[1];
-      const val = m[2].trim();
-      args[key] = /^\d+$/.test(val) ? Number(val) : val;
-    }
-    return { id: crypto.randomUUID(), name, arguments: JSON.stringify(args) };
-  }
-
   return null;
 }
 
 export function looksLikeToolPayload(content: string): boolean {
   const trimmed = content.trim();
-  if (!trimmed.includes("{") && !trimmed.includes("<tool_call>")) return false;
-  if (trimmed.includes("<function=")) return true;
+  if (
+    trimmed.startsWith("<tool_call") ||
+    trimmed.startsWith("<function") ||
+    trimmed.includes("<tool_call") ||
+    trimmed.includes("<function") ||
+    trimmed.includes("<parameter")
+  ) {
+    return true;
+  }
+  if (!trimmed.includes("{")) return false;
 
   const match = trimmed.match(/\{[\s\S]*\}/);
   if (!match) return false;
@@ -72,11 +140,13 @@ export function looksLikeToolPayload(content: string): boolean {
 }
 
 /**
- * Strip tokenizer garbage some models emit (e.g. Nemotron `<unk>` dumps).
+ * Strip tokenizer garbage and raw pseudo-tool tags some models emit as text.
  * Returns empty string when nothing usable remains.
  */
 export function sanitizeAssistantText(content: string): string {
   const text = content
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<function=[\s\S]*?<\/function>/gi, "")
     .replace(/<\/?unk>/gi, "")
     .replace(/<unk>/gi, "")
     .replace(/<\/?x\d+>/gi, "")
@@ -108,18 +178,23 @@ export function buildFollowUpMessages(
   toolCalls: LlmToolCall[],
   results: ToolExecResult[]
 ): LlmMessage[] {
+  const toolResultsSummary = results
+    .map((r, i) => {
+      const summaryText = r.message || (isRecord(r.data) ? JSON.stringify(r.data) : String(r.data || ""));
+      return `[Tool Result for "${toolCalls[i]?.name}"]: ${summaryText}`;
+    })
+    .join("\n\n");
+
   return [
     ...baseMessages,
     {
       role: "assistant",
-      content: looksLikeToolPayload(assistantContent) ? null : assistantContent || null,
-      tool_calls: toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+      content: `I'll look that up for you using ${toolCalls.map((t) => t.name).join(", ")}.`,
     },
-    ...toolCalls.map((call, index) => ({
-      role: "tool" as const,
-      tool_call_id: call.id,
-      content: JSON.stringify(results[index] ?? { message: "" }),
-    })),
+    {
+      role: "user",
+      content: `Here is the information from the search:\n${toolResultsSummary}\n\nPlease provide a clear, helpful, and complete final answer to my question based on the information above. Do not output raw tool tags or call additional tools.`,
+    },
   ];
 }
 

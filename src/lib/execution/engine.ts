@@ -8,9 +8,11 @@
 import "server-only";
 
 import type {
+  AtlasActionDomain,
   AtlasChatHistoryItem,
   AtlasChatResponse,
   AtlasPendingAction,
+  AtlasConnectionRequest,
 } from "@/lib/atlas/agent-contract";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import type { AtlasStreamChunk } from "@/lib/atlas/server/agent/reply";
@@ -33,7 +35,7 @@ import {
   classifyMemoryIntentHeuristic,
   retrieveMemoriesForTurn,
 } from "@/lib/atlas/server/agent/memory";
-import { inferDomain } from "@/lib/atlas/domain";
+import { inferDomain, DOMAIN_KEYWORDS } from "@/lib/atlas/domain";
 import type { Execution } from "./types";
 import type { Capability } from "@/lib/atlas/planner/planner";
 
@@ -83,6 +85,50 @@ let _demoFallback: GenerateReply | null = null;
 // completes (step returns to "idle").
 const _activeDomain = new Map<string, string>();
 
+function resolveConnectionRequestForDomain(domain: string): AtlasConnectionRequest | undefined {
+  if (domain === "food") {
+    return {
+      integrationId: "swiggy",
+      integrationName: "Swiggy",
+      capability: "Food Delivery",
+      authMethod: "oauth",
+      icon: "🍔",
+      description: "Connect your Swiggy account to let Atlas order meals directly to your door.",
+    };
+  }
+  if (domain === "rides") {
+    return {
+      integrationId: "uber",
+      integrationName: "Uber",
+      capability: "Rides",
+      authMethod: "oauth",
+      icon: "🚕",
+      description: "Connect your Uber account to book rides directly.",
+    };
+  }
+  if (domain === "shopping") {
+    return {
+      integrationId: "amazon",
+      integrationName: "Amazon",
+      capability: "Shopping",
+      authMethod: "oauth",
+      icon: "📦",
+      description: "Connect your Amazon account for autonomous price comparison and 1-tap checkout.",
+    };
+  }
+  if (domain === "travel") {
+    return {
+      integrationId: "makemytrip",
+      integrationName: "MakeMyTrip",
+      capability: "Travel & Flights",
+      authMethod: "oauth",
+      icon: "✈️",
+      description: "Connect your travel account to search and prepare flight bookings.",
+    };
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Live pipeline — runs when a model is configured
 // ---------------------------------------------------------------------------
@@ -96,20 +142,21 @@ async function liveGenerateReply(
 ): Promise<AtlasChatResponse> {
   let domain = inferDomain(message, history);
 
-  // Lock domain: once a flow starts, keep routing to it until the flow
-  // completes (step returns to "idle"). This ensures "5", "yes", "that one"
-  // during a food flow stay in the food pipeline.
-  const locked = _activeDomain.get(userId);
-  if (locked) {
-    const { resolveDomainLock } = await import("@/lib/atlas/integrations/routing");
-    const state = await resolveDomainLock(userId, locked);
-    if (state.isActive) {
-      domain = locked;
+  if (domain === "general") {
+    _activeDomain.delete(userId);
+  } else {
+    const locked = _activeDomain.get(userId);
+    if (locked) {
+      const { resolveDomainLock } = await import("@/lib/atlas/integrations/routing");
+      const state = await resolveDomainLock(userId, locked);
+      if (state.isActive) {
+        domain = locked;
+      } else {
+        _activeDomain.delete(userId);
+      }
     } else {
-      _activeDomain.delete(userId);
+      _activeDomain.set(userId, domain);
     }
-  } else if (domain !== "general") {
-    _activeDomain.set(userId, domain);
   }
 
   // Provider selection: if multiple providers exist for this domain and none
@@ -172,6 +219,8 @@ async function liveGenerateReply(
   // domain, exclude the domain's fragile tools so the LLM never attempts (and
   // then retries) a service that cannot be reached.
   const noProvider = domain !== "general" && providers.length === 0;
+  const isExplicitDomainRequest = DOMAIN_KEYWORDS.some((k) => k.domain === domain && k.pattern.test(message));
+  const connectionRequest = (noProvider && isExplicitDomainRequest) ? resolveConnectionRequestForDomain(domain) : undefined;
   if (noProvider) {
     toolDefs = toolDefs.filter((tool) => !tool.name.startsWith("food_"));
   }
@@ -192,7 +241,7 @@ async function liveGenerateReply(
   if (noProvider) {
     systemPrompt += `
 ## Provider not connected
-A ${domain} service is not connected right now, so the ${domain} tools are unavailable. Do not call unavailable tools, do not invent ${domain} results, and never claim a ${domain} action was performed. If the user wants a real ${domain} action, say the service isn't connected yet and that it can be connected in Settings.`;
+A ${domain} service is not connected right now, so the ${domain} tools are unavailable. Do not call unavailable tools, do not invent ${domain} results, and never claim a ${domain} action was performed. If the user wants a real ${domain} action, say the service isn't connected yet and offer to connect it.`;
   }
   if (toolDefs.length > 0) {
     const { buildToolRules } = await import("@/lib/atlas/integrations/routing");
@@ -277,6 +326,7 @@ A ${domain} service is not connected right now, so the ${domain} tools are unava
         mode: "live",
         toolsUsed,
         action: lastAction,
+        connectionRequest,
       };
     }
 
@@ -300,6 +350,7 @@ A ${domain} service is not connected right now, so the ${domain} tools are unava
         mode: "live",
         toolsUsed,
         action: lastAction,
+        connectionRequest,
       };
     }
 
@@ -317,10 +368,11 @@ A ${domain} service is not connected right now, so the ${domain} tools are unava
     mode: "live",
     toolsUsed,
     action: lastAction,
+    connectionRequest,
   };
 }
 
-async function* liveStreamGenerateReply(
+export async function* liveStreamGenerateReply(
   message: string,
   history: AtlasChatHistoryItem[],
   userId: string,
@@ -328,265 +380,23 @@ async function* liveStreamGenerateReply(
   signal?: AbortSignal,
   options?: { conversationId?: string; executionId?: string }
 ): AsyncGenerator<AtlasStreamChunk> {
-  let domain = inferDomain(message, history);
+  signal?.throwIfAborted();
 
-  // Lock domain during active flow.
-  const locked = _activeDomain.get(userId);
-  if (locked) {
-    const { resolveDomainLock } = await import("@/lib/atlas/integrations/routing");
-    const state = await resolveDomainLock(userId, locked);
-    if (state.isActive) {
-      domain = locked;
-    } else {
-      _activeDomain.delete(userId);
-    }
-  } else if (domain !== "general") {
-    _activeDomain.set(userId, domain);
+  const response = await liveGenerateReply(message, history, userId, capabilities, options);
+  const cleanText = sanitizeAssistantText(response.reply) || response.reply;
+
+  // Stream words smoothly for live chat typewriter animation
+  const tokens = cleanText.match(/\S+|\s+/g) || [cleanText];
+  for (const token of tokens) {
+    signal?.throwIfAborted();
+    yield { text: token, connectionRequest: response.connectionRequest };
   }
 
-  // Provider selection: if multiple providers exist for this domain and none
-  // is selected, return a provider selection required response.
-  const { getProvidersForDomain } = await import("@/lib/atlas/flows/registry");
-  const { getSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
-  const providers = domain !== "general" ? await getProvidersForDomain(domain) : [];
-
-  let streamSelected = getSelectedProvider(domain);
-
-  if (providers.length > 1 && !streamSelected) {
-    const capability = DOMAIN_TO_CAPABILITY[domain]?.[0];
-    if (capability) {
-      const { resolveSelectedProvider } = await import("@/lib/atlas/integrations/selector");
-      const { setSelectedProvider } = await import("@/lib/atlas/flows/provider-state");
-      const policyProviderId = await resolveSelectedProvider(capability, userId);
-      if (policyProviderId && providers.some((p) => p.id === policyProviderId)) {
-        setSelectedProvider(domain, policyProviderId);
-        streamSelected = policyProviderId;
-      }
-    }
-  }
-
-  if (providers.length > 1 && !streamSelected) {
-    // Yield a chunk that the UI can interpret as provider selection required.
-    yield {
-      text: "",
-      done: true,
-      action: undefined,
-      providerSelectionRequired: true,
-      providers: providers.map((p) => ({ id: p.id, name: p.name })),
-      domain,
-    } as AtlasStreamChunk;
-    return;
-  }
-
-  // Domain-specific requests: let the LLM handle them with flow guides.
-  // Only fall back to demo when no model is configured (checked below).
-
-  const modelChain = await resolveModelChain(domain);
-  if (!modelChain) {
-    // No model available — use demo fallback for domain-specific requests.
-    if (domain !== "general" && _demoFallback) {
-      const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
-      yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
-      return;
-    }
-    throw new Error("No model configured — cannot run live streaming pipeline.");
-  }
-
-  let activeModel = modelChain.primary.model;
-  let fallbackIndex = 0;
-
-  const streamCaps = DOMAIN_TO_CAPABILITY[domain] ?? ["web"];
-  let streamToolDefs = await getToolsForCapabilities(streamCaps);
-
-  // Integration readiness gate: exclude fragile domain tools when no provider
-  // is connected so the LLM never attempts a service that cannot be reached.
-  const noProvider = domain !== "general" && providers.length === 0;
-  if (noProvider) {
-    streamToolDefs = streamToolDefs.filter((tool) => !tool.name.startsWith("food_"));
-  }
-
-  // Load and inject flow guide and intent-aware memory recall.
-  const { resolveFlowGuide } = await import("@/lib/atlas/flows/loader");
-  const flowGuide = await resolveFlowGuide(domain);
-
-  const memoryRecall = await retrieveMemoriesForTurn(userId, message, domain, {
-    history,
-    intent: classifyMemoryIntentHeuristic(message),
-  });
-
-  let systemPrompt = buildSystemPrompt(memoryRecall.lines, undefined, {
-    flowGuide,
-    memoryMode: memoryRecall.mode,
-  });
-  if (noProvider) {
-    systemPrompt += `
-## Provider not connected
-A ${domain} service is not connected right now, so the ${domain} tools are unavailable. Do not call unavailable tools, do not invent ${domain} results, and never claim a ${domain} action was performed. If the user wants a real ${domain} action, say the service isn't connected yet and that it can be connected in Settings.`;
-  }
-  if (streamToolDefs.length > 0) {
-    const { buildToolRules } = await import("@/lib/atlas/integrations/routing");
-    systemPrompt += buildToolRules(streamToolDefs);
-  }
-  const baseMessages = historyToLlmMessages(systemPrompt, history, message);
-
-  const toolContext: ToolContext = {
-    userId,
-    history: history.map((item) => ({ role: item.role, text: item.text })),
+  yield {
+    done: true,
+    action: response.action,
+    connectionRequest: response.connectionRequest,
   };
-  let messages: LlmMessage[] = baseMessages;
-  const toolsUsed: string[] = [];
-  let lastAction: AtlasPendingAction | undefined;
-  const runId = `llm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    let fullContent = "";
-    const streamToolCalls: LlmToolCall[] = [];
-    let chunkCount = 0;
-    let suppressed = false;
-    let streamError: Error | null = null;
-    let streamUsage: { promptTokens?: number; completionTokens?: number } | undefined;
-    const attemptStartedAt = Date.now();
-    try {
-      for await (const chunk of streamChat({
-        model: activeModel.id,
-        messages,
-        tools: streamToolDefs.length > 0 ? streamToolDefs : undefined,
-        toolChoice: "auto",
-        temperature: 0.3,
-        maxTokens: 2048,
-        apiKey: activeModel.apiKey,
-        baseUrl: activeModel.baseUrl,
-        provider: activeModel.provider,
-        signal,
-      })) {
-        chunkCount++;
-        if (chunk.type === "token") {
-          fullContent += chunk.text;
-          // Suppress tool payload tokens — if the model is emitting raw JSON
-          // tool calls as text, do not stream those tokens to the client.
-          if (!suppressed && !looksLikeToolPayload(fullContent)) {
-            yield { text: chunk.text };
-          } else {
-            suppressed = true;
-          }
-        } else if (chunk.type === "tool_call") {
-          streamToolCalls.push(chunk.call);
-        } else if (chunk.type === "done" && chunk.usage) {
-          streamUsage = chunk.usage;
-        }
-      }
-    } catch (error) {
-      streamError = error instanceof Error ? error : new Error(String(error));
-    }
-
-    await recordLlmCall({
-      runId,
-      conversationId: options?.conversationId,
-      userId,
-      domain,
-      modelId: activeModel.id,
-      provider: activeModel.provider,
-      round,
-      tokensIn: streamUsage?.promptTokens,
-      tokensOut: streamUsage?.completionTokens,
-      latencyMs: Date.now() - attemptStartedAt,
-      success: streamError === null,
-      error: streamError ? streamError.message : undefined,
-      toolCalls: streamToolCalls.map((tc) => tc.name),
-    });
-
-    // If the current model failed and we have fallbacks, try the next one.
-    if (streamError) {
-      if (fallbackIndex < modelChain.fallbacks.length) {
-        activeModel = modelChain.fallbacks[fallbackIndex].model;
-        fallbackIndex++;
-        round--;
-        continue;
-      }
-      throw LlmRequestError.from(streamError, activeModel.provider);
-    }
-    if (streamToolCalls.length === 0) {
-      // If the model produced no tokens at all, it may not support streaming
-      // with tools (e.g. some Nemotron models). Retry without tools to get
-      // a text response, or fall back to the demo responder.
-      if (chunkCount <= 1 && fullContent.length === 0 && round === 0) {
-        let fallbackContent = "";
-        let retryUsage: { promptTokens?: number; completionTokens?: number } | undefined;
-        const retryStartedAt = Date.now();
-        for await (const chunk of streamChat({
-          model: activeModel.id,
-          messages,
-          temperature: 0.3,
-          maxTokens: 2048,
-          apiKey: activeModel.apiKey,
-          baseUrl: activeModel.baseUrl,
-          provider: activeModel.provider,
-          signal,
-        })) {
-          if (chunk.type === "token") {
-            fallbackContent += chunk.text;
-            yield { text: chunk.text };
-          } else if (chunk.type === "done" && chunk.usage) {
-            retryUsage = chunk.usage;
-          }
-        }
-        await recordLlmCall({
-          runId,
-          conversationId: options?.conversationId,
-          userId,
-          domain,
-          modelId: activeModel.id,
-          provider: activeModel.provider,
-          round,
-          tokensIn: retryUsage?.promptTokens,
-          tokensOut: retryUsage?.completionTokens,
-          latencyMs: Date.now() - retryStartedAt,
-          success: true,
-        });
-        if (fallbackContent.length > 0) {
-          yield { done: true };
-          return;
-        }
-      }
-      // If the model outputs reasoning or a raw tool payload instead of tool
-      // calls, fall back to the demo responder which handles domains via
-      // server-side orchestration.
-      if (round === 0 && _demoFallback && (looksLikeReasoning(fullContent) || looksLikeToolPayload(fullContent))) {
-        const fallbackResponse = await _demoFallback(message, history, userId, capabilities, options);
-        yield { text: fallbackResponse.reply, done: true, action: fallbackResponse.action };
-        return;
-      }
-      yield { done: true, action: lastAction };
-      return;
-    }
-
-    const results = [];
-    for (const call of streamToolCalls) {
-      const parsed = JSON.parse(call.arguments || "{}");
-      const execResult = await executeTool(call.name, parsed, toolContext);
-      results.push(execResult);
-      toolsUsed.push(call.name);
-      if (execResult.action) {
-        lastAction = execResult.action;
-      }
-    }
-
-    // Readiness gate: when the only tool result awaits the user (e.g. a failed
-    // or unavailable connection that surfaced a question), relay it verbatim and
-    // stop — do NOT feed it back so the model can retry the same failing tool.
-    if (results.length === 1 && results[0].awaitingUser && !results[0].action) {
-      yield {
-        text: results[0].message || summarizeToolTurn(streamToolCalls, results),
-        done: true,
-        action: lastAction,
-      };
-      return;
-    }
-
-    messages = buildFollowUpMessages(messages, fullContent, streamToolCalls, results);
-  }
-
-  yield { done: true, action: lastAction };
 }
 
 // ---------------------------------------------------------------------------

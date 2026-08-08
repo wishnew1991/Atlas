@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { AtlasAuthProvider } from "@/components/atlas/atlas-auth-provider";
 import { MobileOnly } from "@/components/atlas/mobile-only";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 
 export const metadata: Metadata = {
   title: "Atlas | Personal AI Assistant",
@@ -26,9 +27,11 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AtlasAuthProvider>
-          <MobileOnly>
-            {children}
-          </MobileOnly>
+          <ToastProvider>
+            <MobileOnly>
+              {children}
+            </MobileOnly>
+          </ToastProvider>
         </AtlasAuthProvider>
       </body>
     </html>
