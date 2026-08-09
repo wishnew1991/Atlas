@@ -15,6 +15,10 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import type { MemoryType } from "@/lib/atlas/memory/service";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function profileUserId(actorUserId: string) {
   return actorUserId || "atlas-demo-user";
 }

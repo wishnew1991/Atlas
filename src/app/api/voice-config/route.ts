@@ -4,6 +4,10 @@ import { readVoiceConfig } from "@/lib/atlas/server/model-registry";
 import { resolveConfiguredSttModel, resolveConfiguredTtsTarget, LOCAL_PIPER_TTS_ID } from "@/lib/atlas/server/voice-routing";
 import { isPiperAvailable } from "@/lib/atlas/server/piper-tts";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 /** Public voice config for the chat mic/speak path (no secrets). */
 export async function GET() {
   const [voice, sttModel, ttsTarget, piperAvailable] = await Promise.all([

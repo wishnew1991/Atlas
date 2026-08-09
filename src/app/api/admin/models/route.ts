@@ -12,6 +12,10 @@ import {
   type AtlasProvider,
 } from "@/lib/atlas/server/model-registry";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

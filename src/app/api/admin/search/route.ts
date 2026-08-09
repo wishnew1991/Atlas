@@ -4,6 +4,10 @@ import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { readSerperApiKey, writeSerperApiKey } from "@/lib/atlas/server/model-registry";
 import { serperSearch } from "@/lib/atlas/server/serper";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

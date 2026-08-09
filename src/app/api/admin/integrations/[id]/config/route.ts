@@ -6,6 +6,10 @@ import {
   upsertIntegrationConfig,
 } from "@/lib/atlas/integrations/registry";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

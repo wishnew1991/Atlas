@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { transcribeAudio } from "@/lib/atlas/server/nemo-voice";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {

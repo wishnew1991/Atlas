@@ -4,6 +4,10 @@ import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { decryptSecret } from "@/lib/security/secrets";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

@@ -1,15 +1,7 @@
-import { redirect } from "next/navigation";
+import { AtlasHomeShell } from "@/components/atlas/atlas-home-shell";
 
-import { AssistantHome } from "@/components/atlas/assistant-home";
-import { getAtlasActor } from "@/lib/atlas/server/auth";
-import { prisma } from "@/lib/atlas/server/prisma";
+export const runtime = "edge";
 
-export const dynamic = "force-dynamic";
-
-export default async function AtlasHomePage() {
-  const actor = await getAtlasActor();
-  const profile = await prisma.userProfile.findUnique({ where: { userId: actor.userId } });
-  if (!profile?.name.trim()) redirect("/welcome");
-
-  return <AssistantHome mode="home" userName={profile.name} />;
+export default function AtlasHomePage() {
+  return <AtlasHomeShell mode="home" />;
 }

@@ -6,6 +6,10 @@ import { isPiperAvailable } from "@/lib/atlas/server/piper-tts";
 import { listSttModelOptions, listTtsModelOptions, LOCAL_PIPER_TTS_ID } from "@/lib/atlas/server/voice-routing";
 import { parseVoiceSttMode, parseVoiceTtsMode } from "@/lib/atlas/voice-modes";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

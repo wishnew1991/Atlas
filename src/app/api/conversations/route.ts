@@ -4,6 +4,10 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { loadLatestConversationSnapshot } from "@/lib/atlas/conversation/persist";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 /** GET /api/conversations?latest=1 — restore the actor's most recent thread. */
 export async function GET(request: Request) {
   try {

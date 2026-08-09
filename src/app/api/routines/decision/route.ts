@@ -4,6 +4,10 @@ import { routines } from "@/lib/atlas/routines";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 /**
  * Handle the user's Yes/No on a naturally-discovered routine suggestion.
  * Accept persists the routine (e.g. the "usual order"); decline says "never

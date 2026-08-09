@@ -1,16 +1,7 @@
-import { redirect } from "next/navigation";
+import { AtlasAdminGate } from "@/components/atlas/atlas-admin-shell";
 
-import { AtlasAdmin } from "@/components/atlas/atlas-admin";
-import { getAtlasActor, isAtlasAdminActor } from "@/lib/atlas/server/auth";
+export const runtime = "edge";
 
-export const dynamic = "force-dynamic";
-
-export default async function AdminPage() {
-  const actor = await getAtlasActor();
-
-  if (!isAtlasAdminActor(actor)) {
-    redirect("/chat");
-  }
-
-  return <AtlasAdmin />;
+export default function AdminPage() {
+  return <AtlasAdminGate />;
 }

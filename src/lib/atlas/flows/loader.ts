@@ -8,28 +8,37 @@
  * Guide resolution:
  *   flows/domain-guides/<domain>.md          → business process
  *   flows/provider-guides/<domain>/<id>.md   → provider quirks
+ *
+ * Guides are bundled at build time (see next.config.js `asset/source` webpack
+ * rule) so they work on Cloudflare Workers, which has no filesystem access.
  */
 
 import "server-only";
 
-import { readFileSync } from "fs";
-import { join } from "path";
 import { resolveProvider, type Provider } from "./registry";
 import { getSelectedProvider } from "./provider-state";
 
-const FLOWS_DIR = join(process.cwd(), "src/lib/atlas/flows");
+import foodDomainGuide from "./domain-guides/food.md";
+import swiggyProviderGuide from "./provider-guides/food/swiggy.md";
+import zomatoProviderGuide from "./provider-guides/food/zomato.md";
+
+const DOMAIN_GUIDES: Record<string, string> = {
+  food: foodDomainGuide,
+};
+
+const PROVIDER_GUIDES: Record<string, Record<string, string>> = {
+  food: {
+    swiggy: swiggyProviderGuide,
+    zomato: zomatoProviderGuide,
+  },
+};
 
 /**
  * Load a domain guide (business process) for a given domain.
  * Returns empty string if no guide exists.
  */
 export function loadDomainGuide(domain: string): string {
-  const path = join(FLOWS_DIR, "domain-guides", `${domain}.md`);
-  try {
-    return readFileSync(path, "utf-8");
-  } catch {
-    return "";
-  }
+  return DOMAIN_GUIDES[domain] ?? "";
 }
 
 /**
@@ -37,12 +46,7 @@ export function loadDomainGuide(domain: string): string {
  * Returns empty string if no guide exists.
  */
 export function loadProviderGuide(providerId: string, domain: string): string {
-  const path = join(FLOWS_DIR, "provider-guides", domain, `${providerId}.md`);
-  try {
-    return readFileSync(path, "utf-8");
-  } catch {
-    return "";
-  }
+  return PROVIDER_GUIDES[domain]?.[providerId] ?? "";
 }
 
 /**

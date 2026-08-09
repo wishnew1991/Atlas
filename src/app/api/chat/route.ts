@@ -8,6 +8,10 @@ import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { LlmRequestError } from "@/lib/atlas/llm/errors";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isHistoryItem(value: unknown): value is AtlasChatHistoryItem {
   if (typeof value !== "object" || value === null) {
     return false;

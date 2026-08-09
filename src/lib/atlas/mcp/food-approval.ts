@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "crypto";
+
 
 import { prisma } from "@/lib/atlas/server/prisma";
 import { foodLog } from "@/lib/atlas/mcp/food-log";
@@ -90,7 +90,7 @@ export async function createFoodApproval(session: FoodSession, userId: string): 
     toPay: totals.toPay,
   };
 
-  const id = `atlas_${randomUUID()}`;
+  const id = `atlas_${globalThis.crypto.randomUUID()}`;
   const itemCount = session.cart.reduce((sum, line) => sum + line.quantity, 0);
   const summary = `${itemCount} item${itemCount === 1 ? "" : "s"} from ${restaurant.name}${
     totals.toPay !== undefined ? ` · ${rupees(totals.toPay)}` : ""

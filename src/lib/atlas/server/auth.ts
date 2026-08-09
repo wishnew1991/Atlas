@@ -35,10 +35,9 @@ async function buildCapabilities(authenticated: boolean): Promise<AtlasCapabilit
 export async function getAtlasActor(): Promise<AtlasActor> {
   try {
     const cookieStore = await cookies();
-    const sessionToken = cookieStore.get("better-auth.session_token")?.value;
+    const allCookies = cookieStore.getAll();
 
-    if (sessionToken) {
-      const allCookies = cookieStore.getAll();
+    if (allCookies.length > 0) {
       const cookieHeader = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
       const h = new Headers({ cookie: cookieHeader });
 

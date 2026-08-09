@@ -15,6 +15,10 @@ import { classifyMcpServer } from "@/lib/atlas/mcp/roles";
 import { invalidateToolCache, primeToolCache } from "@/lib/atlas/mcp/registry";
 import { prisma } from "@/lib/atlas/server/prisma";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

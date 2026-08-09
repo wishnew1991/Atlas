@@ -1,15 +1,25 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+// `node:crypto` is not statically imported here on purpose: Next.js' build-time
+// edge sandbox resolves the module at import time, where nodejs_compat hasn't
+// been wired yet. We lazy-`require` it only when a function actually runs (the
+// Cloudflare Worker ships nodejs_compat, so the same code works on-dev and up).
 
 const ALGORITHM = "aes-256-gcm";
 const PREFIX = "enc:v1:";
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
-// `node:crypto` typings in this repo (TS 5.9 + @types/node 20.8) conflict on
-// Buffer vs generic Uint8Array<ArrayBufferLike>. Runtime is fine; the casts
-// only reconcile the two type declarations.
+type NodeCrypto = typeof import("node:crypto");
+
+let cryptoModule: NodeCrypto | null = null;
+
+function nodeCrypto(): NodeCrypto {
+  if (!cryptoModule) {
+    cryptoModule = require("node:crypto") as NodeCrypto;
+  }
+  return cryptoModule;
+}
 
 function getSecretKey(): Buffer | null {
   const raw = process.env.ATLAS_SECRET_KEY;
@@ -49,6 +59,7 @@ export function encryptSecret(plaintext: string, target = "secret"): string {
     return plaintext;
   }
 
+  const { randomBytes, createCipheriv } = nodeCrypto();
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key as never, iv as never);
   const encrypted = Buffer.concat(
@@ -73,6 +84,7 @@ export function decryptSecret(ciphertext: string | null | undefined): string {
 
   const [ivB64, tagB64, dataB64] = parts;
   try {
+    const { createDecipheriv } = nodeCrypto();
     const decipher = createDecipheriv(ALGORITHM, key as never, Buffer.from(ivB64, "base64") as never);
     decipher.setAuthTag(Buffer.from(tagB64, "base64") as never);
     const decrypted = Buffer.concat(

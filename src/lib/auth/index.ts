@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/atlas/server/prisma";
+import { serverPassword } from "@/lib/atlas/server-password";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -9,6 +10,11 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
+    password: {
+      hash: serverPassword.hash,
+      verify: async (data: { hash: string; password: string }) =>
+        serverPassword.verify(data.hash, data.password),
+    },
   },
   socialProviders: {},
   session: {

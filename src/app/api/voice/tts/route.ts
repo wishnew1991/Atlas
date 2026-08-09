@@ -4,6 +4,10 @@ import { synthesizeSpeech, isPiperAvailable } from "@/lib/atlas/server/piper-tts
 import { resolveConfiguredTtsTarget } from "@/lib/atlas/server/voice-routing";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 export const maxDuration = 60;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

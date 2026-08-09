@@ -1,6 +1,5 @@
 import "server-only";
 
-import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { getStoredMcpClientId, storeMcpClientId } from "@/lib/atlas/server/model-registry";
 
 const SWIGGY_AUTHORIZE = "https://mcp.swiggy.com/auth/authorize";
@@ -9,11 +8,25 @@ const SWIGGY_TOKEN = "https://mcp.swiggy.com/auth/token";
 export const OAUTH_STATE_COOKIE = "atlas_mcp_oauth_state";
 const OAUTH_STATE_MAX_AGE = 10 * 60; // seconds
 
+// Unlike the rest of the app, this lazy loader keeps `node:crypto` out of the
+// module-eval hot path: Next's build-time edge sandbox resolves static imports
+// before nodejs_compat is available, which fails to compile the route.
+type NodeCrypto = typeof import("node:crypto");
+let cryptoModule: NodeCrypto | null = null;
+
+function nodeCrypto(): NodeCrypto {
+  if (!cryptoModule) {
+    cryptoModule = require("node:crypto") as NodeCrypto;
+  }
+  return cryptoModule;
+}
+
 export function defaultRedirectUri(origin: string): string {
   return process.env.ATLAS_MCP_REDIRECT_URI || `${origin}/api/admin/mcp/oauth/callback`;
 }
 
 export function generatePkce(): { verifier: string; challenge: string } {
+  const { randomBytes, createHash } = nodeCrypto();
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
 
@@ -21,7 +34,7 @@ export function generatePkce(): { verifier: string; challenge: string } {
 }
 
 export function generateState(): string {
-  return randomBytes(16).toString("base64url");
+  return nodeCrypto().randomBytes(16).toString("base64url");
 }
 
 export interface PendingAuthorization {
@@ -34,14 +47,14 @@ export interface PendingAuthorization {
 const secret = () => process.env.ATLAS_MCP_OAUTH_SECRET || "atlas-dev-oauth-secret";
 
 function sign(value: string): string {
-  return createHash("sha256").update(`${secret()}:${value}`).digest("base64url");
+  return nodeCrypto().createHash("sha256").update(`${secret()}:${value}`).digest("base64url");
 }
 
 function safeEqual(a: string, b: string): boolean {
   const aBuf = new Uint8Array(Buffer.from(a, "utf8"));
   const bBuf = new Uint8Array(Buffer.from(b, "utf8"));
   if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
+  return nodeCrypto().timingSafeEqual(aBuf, bBuf);
 }
 
 export function encodePendingAuthorization(value: PendingAuthorization): string {

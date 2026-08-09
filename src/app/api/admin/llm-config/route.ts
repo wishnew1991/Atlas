@@ -5,6 +5,10 @@ import { prisma } from "@/lib/atlas/server/prisma";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { decryptSecret } from "@/lib/security/secrets";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 // Internal endpoint: returns the active LLM configuration for MCP servers /
 // the local Browser Use launcher script. Admin-authorized — the previous
 // localhost Host-header check was spoofable by any client.

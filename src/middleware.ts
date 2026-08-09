@@ -11,13 +11,15 @@ function redirectToAdminLogin(request: NextRequest) {
 }
 
 const GUEST_ID_COOKIE = "atlas-user-id";
-const SESSION_COOKIE = "better-auth.session_token";
+// better-auth names its session cookie "better-auth.session_token" in dev and
+// "__Secure-better-auth.session_token" on HTTPS deployments — check both.
+const SESSION_COOKIES = ["__Secure-better-auth.session_token", "better-auth.session_token"];
 
 // Issue a unique per-visitor identity cookie for unauthenticated requests so
 // guests never share a single backend identity (data isolation).
 function ensureGuestIdentity(request: NextRequest): NextResponse {
   const response = NextResponse.next();
-  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const hasSession = SESSION_COOKIES.some((name) => Boolean(request.cookies.get(name)?.value));
   const hasGuestId = Boolean(request.cookies.get(GUEST_ID_COOKIE)?.value);
   if (!hasSession && !hasGuestId) {
     response.cookies.set(GUEST_ID_COOKIE, crypto.randomUUID(), {
@@ -39,7 +41,8 @@ export default function middleware(request: NextRequest) {
   // gates on "is signed in"; the real admin check runs server-side in the
   // admin page and admin API routes (requireAtlasAdmin).
   if (isAdminRoute(request)) {
-    if (!request.cookies.get(SESSION_COOKIE)?.value) {
+    const hasSession = SESSION_COOKIES.some((name) => Boolean(request.cookies.get(name)?.value));
+    if (!hasSession) {
       // /admin/login is itself the admin sign-in page — let it render.
       return isAdminLoginRoute(request) ? ensureGuestIdentity(request) : redirectToAdminLogin(request);
     }

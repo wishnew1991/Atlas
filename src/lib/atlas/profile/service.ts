@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "crypto";
+
 
 import { prisma } from "@/lib/atlas/server/prisma";
 import { memoryService, type MemoryType } from "@/lib/atlas/memory/service";
@@ -204,5 +204,5 @@ export async function deleteProfileMemory(userId: string, memoryId: string) {
 }
 
 export function newId() {
-  return randomUUID();
+  return globalThis.crypto.randomUUID();
 }

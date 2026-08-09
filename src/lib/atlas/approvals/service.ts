@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "crypto";
+
 
 import { prisma } from "@/lib/atlas/server/prisma";
 import type { AtlasActionDomain, AtlasPendingAction } from "@/lib/atlas/agent-contract";
@@ -39,7 +39,7 @@ export async function createApproval(
             : "Request";
   const moneyLabel = domain === "rides" ? "Fare estimate" : "Total";
 
-  const id = `atlas_${randomUUID()}`;
+  const id = `atlas_${globalThis.crypto.randomUUID()}`;
 
   const action: AtlasPendingAction = {
     id,

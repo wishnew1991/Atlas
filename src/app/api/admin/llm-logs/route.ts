@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { prisma } from "@/lib/atlas/server/prisma";
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 function parseCount(value: string | null, fallback: number, max: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);

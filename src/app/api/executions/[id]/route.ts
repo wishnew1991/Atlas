@@ -4,6 +4,10 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { getExecution, toPublicExecution } from "@/lib/execution/manager";
 
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
+
 /** GET /api/executions/:id — public execution snapshot. */
 export async function GET(
   _request: Request,
