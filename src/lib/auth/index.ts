@@ -8,9 +8,10 @@ export const auth = betterAuth({
     provider: "sqlite",
   }),
   secret: process.env.BETTER_AUTH_SECRET || "preview-secret-replace-me",
-  baseURL: process.env.BETTER_AUTH_URL || "https://preview.atlas-9um.pages.dev",
-  // Trust all preview origins dynamically. In production, set BETTER_AUTH_TRUSTED_ORIGINS env var.
-  trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map(o=>o.trim()) : ["*"],
+  baseURL: process.env.BETTER_AUTH_URL,
+  trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS 
+    ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map(o=>o.trim()) 
+    : ["https://atlas-9um.pages.dev", "https://admin.atlas-9um.pages.dev", "http://localhost:3000", "http://localhost:8788"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
