@@ -77,7 +77,12 @@ export function ProfileBoard() {
     setError(null);
     try {
       const response = await fetch("/api/profile", { cache: "no-store" });
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        throw new Error(!response.ok ? "Server error." : "Invalid JSON response.");
+      }
       if (!response.ok) {
         const detail =
           typeof payload === "object" &&
@@ -116,7 +121,12 @@ export function ProfileBoard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        throw new Error(!response.ok ? "Server error." : "Invalid JSON response.");
+      }
       if (!response.ok) {
         const detail =
           typeof payload === "object" &&
@@ -269,11 +279,16 @@ export function ProfileBoard() {
               } catch {
                 /* sign out still proceeds client-side */
               }
-              // Drop the guest identity too so the consumer app re-enters the
-              // welcome/naming flow instead of recognizing the previous guest.
-              document.cookie = "atlas-user-id=; path=/; max-age=0";
+              // Drop the cached profile name cookie
               document.cookie = "atlas-user-name=; path=/; max-age=0";
-              router.push("/welcome");
+              // Clear chat session artifacts so the new user starts fresh.
+              try {
+                localStorage.removeItem("atlas-conversation-id");
+                localStorage.removeItem("atlas-tts-muted");
+              } catch {
+                /* localStorage may be unavailable */
+              }
+              router.push("/sign-in");
               router.refresh();
             }}
           >

@@ -15,6 +15,7 @@ export interface AtlasCapabilities {
 
 export interface AtlasActor {
   userId: string;
+  name?: string;
   isAuthenticated: boolean;
   capabilities: AtlasCapabilities;
 }
@@ -33,10 +34,15 @@ async function buildCapabilities(authenticated: boolean): Promise<AtlasCapabilit
 }
 
 export async function getAtlasActor(): Promise<AtlasActor> {
+  let guestUserId = "anonymous";
   try {
     const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
+    const guestCookie = cookieStore.get("atlas-user-id");
+    if (guestCookie?.value) {
+      guestUserId = guestCookie.value;
+    }
 
+    const allCookies = cookieStore.getAll();
     if (allCookies.length > 0) {
       const cookieHeader = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
       const h = new Headers({ cookie: cookieHeader });
@@ -45,7 +51,7 @@ export async function getAtlasActor(): Promise<AtlasActor> {
 
       if (session?.user) {
         const capabilities = await buildCapabilities(true);
-        return { userId: session.user.id, isAuthenticated: true, capabilities };
+        return { userId: session.user.id, name: session.user.name, isAuthenticated: true, capabilities };
       }
     }
   } catch (err) {
@@ -53,18 +59,7 @@ export async function getAtlasActor(): Promise<AtlasActor> {
   }
 
   const capabilities = await buildCapabilities(false);
-  return { userId: await guestUserIdFromCookies(), isAuthenticated: false, capabilities };
-}
-
-async function guestUserIdFromCookies(): Promise<string> {
-  try {
-    const requestHeaders = await headers();
-    const cookie = requestHeaders.get("cookie") || "";
-    const match = /(?:^|;\s*)atlas-user-id=([^;]+)/.exec(cookie);
-    return match ? decodeURIComponent(match[1]) : "anonymous";
-  } catch {
-    return "anonymous";
-  }
+  return { userId: guestUserId, isAuthenticated: false, capabilities };
 }
 
 export function canUseLiveLlm(actor: AtlasActor): boolean {

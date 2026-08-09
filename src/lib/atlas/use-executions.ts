@@ -108,7 +108,14 @@ export function useExecutions(limit = 50) {
       const response = await fetch(`/api/executions?limit=${limit}`, {
         cache: "no-store",
       });
-      const payload: unknown = await response.json();
+      
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        throw new Error(!response.ok ? "Server error." : "Invalid JSON response.");
+      }
+      
       if (!response.ok) {
         const detail =
           typeof payload === "object" &&

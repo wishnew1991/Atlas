@@ -29,7 +29,12 @@ export function ActivityBoard() {
     setError(null);
     try {
       const response = await fetch("/api/activity?limit=40", { cache: "no-store" });
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        throw new Error(!response.ok ? "Server error." : "Invalid JSON response.");
+      }
       if (!response.ok) {
         const detail =
           typeof payload === "object" &&

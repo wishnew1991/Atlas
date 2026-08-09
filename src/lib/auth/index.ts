@@ -7,6 +7,10 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "sqlite",
   }),
+  secret: process.env.BETTER_AUTH_SECRET || "preview-secret-replace-me",
+  baseURL: process.env.BETTER_AUTH_URL || "https://preview.atlas-9um.pages.dev",
+  // Trust all preview origins dynamically. In production, set BETTER_AUTH_TRUSTED_ORIGINS env var.
+  trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map(o=>o.trim()) : ["*"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,

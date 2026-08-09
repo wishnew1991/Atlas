@@ -171,23 +171,6 @@ export async function updateProfile(userId: string, patch: ProfilePatch): Promis
   return getProfileSnapshot(userId);
 }
 
-/**
- * Apply identity from sign-in without clobbering fields the user already set.
- */
-export async function seedProfileIdentity(
-  userId: string,
-  identity: { name?: string; phone?: string; email?: string }
-): Promise<ProfileSnapshot> {
-  const row = await ensureProfile(userId);
-  const data: { name?: string; phone?: string; email?: string } = {};
-  if (identity.name?.trim() && !row.name.trim()) data.name = identity.name.trim();
-  if (identity.email?.trim() && !row.email.trim()) data.email = identity.email.trim();
-  if (identity.phone?.trim() && !row.phone.trim()) data.phone = identity.phone.trim();
-  if (Object.keys(data).length > 0) {
-    await prisma.userProfile.update({ where: { userId }, data });
-  }
-  return getProfileSnapshot(userId);
-}
 
 export async function addProfileMemory(
   userId: string,

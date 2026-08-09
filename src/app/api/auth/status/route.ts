@@ -16,13 +16,23 @@ export async function GET() {
   // authenticated or not, and gate on profileName only.
   let profileName: string | null = null;
   let isAdmin = false;
-
-  if (actor.userId) {
+  if (actor.name) {
+    profileName = actor.name;
+  } else if (actor.userId) {
     const profile = await prisma.userProfile.findUnique({
       where: { userId: actor.userId },
       select: { name: true },
     });
-    const trimmed = profile?.name.trim() || "";
+    let trimmed = profile?.name.trim() || "";
+
+    if (!trimmed && actor.isAuthenticated) {
+      const user = await prisma.user.findUnique({
+        where: { id: actor.userId },
+        select: { name: true },
+      });
+      trimmed = user?.name?.trim() || "";
+    }
+
     if (trimmed) profileName = trimmed;
   }
 

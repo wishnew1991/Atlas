@@ -7,3 +7,11 @@ pages_build_output_dir = ".vercel/output/static"
 binding = "DB"
 database_name = "atlas-db"
 database_id = "ff7346b0-3421-4381-b73a-4886b6c23836"
+
+[env.preview.vars]
+ATLAS_ADMIN_USER_IDS = "6dZFB461PBduB32YyDsv8mJgsMuprFkm"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "atlas-db"
+database_id = "ff7346b0-3421-4381-b73a-4886b6c23836"

@@ -24,7 +24,7 @@ export function LocalAuthScreen({
   const router = useRouter();
   const isSignIn = mode === "sign-in";
   const signInRedirectTo = redirectTo ?? "/chat";
-  const signUpRedirectTo = redirectTo ?? "/welcome";
+  const signUpRedirectTo = redirectTo ?? "/";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +40,7 @@ export function LocalAuthScreen({
       let res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "dev@atlas.local", password: "atlas-dev-2024" }),
+        body: JSON.stringify({ email: "dev@atlas.local", password: "Atlas@2026" }),
       });
 
       if (!res.ok) {
@@ -48,13 +48,13 @@ export function LocalAuthScreen({
         await fetch("/api/auth/sign-up/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Developer", email: "dev@atlas.local", password: "atlas-dev-2024" }),
+          body: JSON.stringify({ name: "Developer", email: "dev@atlas.local", password: "Atlas@2026" }),
         });
         // Sign in
         res = await fetch("/api/auth/sign-in/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "dev@atlas.local", password: "atlas-dev-2024" }),
+          body: JSON.stringify({ email: "dev@atlas.local", password: "Atlas@2026" }),
         });
       }
 

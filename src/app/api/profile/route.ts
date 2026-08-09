@@ -5,7 +5,6 @@ import {
   deleteProfileMemory,
   getProfileSnapshot,
   newId,
-  seedProfileIdentity,
   updateProfile,
   type ProfileAddress,
   type ProfilePayment,
@@ -49,15 +48,6 @@ export async function PATCH(request: Request) {
 
     const payload = body as Record<string, unknown>;
     const op = typeof payload.op === "string" ? payload.op : "update";
-
-    if (op === "seed_identity") {
-      const profile = await seedProfileIdentity(userId, {
-        ...(typeof payload.name === "string" ? { name: payload.name } : {}),
-        ...(typeof payload.email === "string" ? { email: payload.email } : {}),
-        ...(typeof payload.phone === "string" ? { phone: payload.phone } : {}),
-      });
-      return NextResponse.json({ profile });
-    }
 
     if (op === "add_memory") {
       const text = typeof payload.text === "string" ? payload.text : "";
