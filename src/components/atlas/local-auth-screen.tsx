@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 type AuthMode = "sign-in" | "sign-up";
 
@@ -23,7 +24,7 @@ export function LocalAuthScreen({
 }: LocalAuthScreenProps) {
   const router = useRouter();
   const isSignIn = mode === "sign-in";
-  const signInRedirectTo = redirectTo ?? "/chat";
+  const signInRedirectTo = redirectTo ?? "/";
   const signUpRedirectTo = redirectTo ?? "/";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -36,31 +37,29 @@ export function LocalAuthScreen({
     setError("");
     setDevLoading(true);
     try {
-      // Try sign in first
-      let res = await fetch("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "dev@atlas.local", password: "Atlas@2026" }),
+      let { error: signInError } = await authClient.signIn.email({
+        email: "dev@atlas.local",
+        password: "Atlas@2026",
       });
 
-      if (!res.ok) {
+      if (signInError) {
         // Create dev account
-        await fetch("/api/auth/sign-up/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Developer", email: "dev@atlas.local", password: "Atlas@2026" }),
+        await authClient.signUp.email({
+          name: "Developer",
+          email: "dev@atlas.local",
+          password: "Atlas@2026",
         });
-        // Sign in
-        res = await fetch("/api/auth/sign-in/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "dev@atlas.local", password: "Atlas@2026" }),
+        
+        // Sign in again
+        const { error: retryError } = await authClient.signIn.email({
+          email: "dev@atlas.local",
+          password: "Atlas@2026",
         });
+        
+        if (retryError) throw new Error(retryError.message || "Dev login failed");
       }
 
-      if (!res.ok) throw new Error("Dev login failed");
-
-      router.push("/chat");
+      router.push("/chat"); // For Dev login, we can redirect to /chat or / as preferred. Let's keep /chat.
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Dev login failed");
@@ -76,29 +75,26 @@ export function LocalAuthScreen({
 
     try {
       if (isSignIn) {
-        const res = await fetch("/api/auth/sign-in/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+        const { error: signInError } = await authClient.signIn.email({
+          email,
+          password,
         });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || "Sign in failed");
+        if (signInError) {
+          throw new Error(signInError.message || "Sign in failed");
         }
 
         router.push(signInRedirectTo);
         router.refresh();
       } else {
-        const res = await fetch("/api/auth/sign-up/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }),
+        const { error: signUpError } = await authClient.signUp.email({
+          name,
+          email,
+          password,
         });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.message || "Sign up failed");
+        if (signUpError) {
+          throw new Error(signUpError.message || "Sign up failed");
         }
 
         router.push(signUpRedirectTo);

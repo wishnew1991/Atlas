@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 import { LocalAuthScreen } from "./local-auth-screen";
 
@@ -17,11 +18,7 @@ export function AdminLoginScreen({ signedInAsNonAdmin }: AdminLoginScreenProps) 
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await fetch("/api/auth/sign-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      await authClient.signOut();
     } finally {
       router.push("/admin/login");
       router.refresh();

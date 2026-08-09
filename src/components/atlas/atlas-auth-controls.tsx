@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 export function AtlasAuthControls() {
   const router = useRouter();
@@ -11,13 +12,9 @@ export function AtlasAuthControls() {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await fetch("/api/auth/sign-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      await authClient.signOut();
     } finally {
-      router.push("/sign-in");
+      router.push("/admin/login");
       router.refresh();
     }
   };

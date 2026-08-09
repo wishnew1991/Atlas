@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { authClient } from "@/lib/auth-client";
 import { ConnectionsSection } from "./connections-section";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -271,16 +272,14 @@ export function ProfileBoard() {
               if (signingOut) return;
               setSigningOut(true);
               try {
-                await fetch("/api/auth/sign-out", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: "{}",
-                });
+                await authClient.signOut();
               } catch {
                 /* sign out still proceeds client-side */
               }
+              
               // Drop the cached profile name cookie
               document.cookie = "atlas-user-name=; path=/; max-age=0";
+
               // Clear chat session artifacts so the new user starts fresh.
               try {
                 localStorage.removeItem("atlas-conversation-id");
