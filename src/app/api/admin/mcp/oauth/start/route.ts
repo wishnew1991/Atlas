@@ -12,7 +12,6 @@ import {
 } from "@/lib/atlas/server/mcp-oauth";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

@@ -6,7 +6,6 @@ import {
   getIntegrationConfig,
 } from "@/lib/atlas/integrations/registry";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

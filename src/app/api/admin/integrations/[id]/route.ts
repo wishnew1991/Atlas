@@ -10,7 +10,6 @@ import { isCanonicalCapability, type CanonicalCapability } from "@/lib/atlas/cap
 import type { AuthMethod } from "@/lib/atlas/integrations/types";
 import { TRANSPORT_KINDS } from "@/lib/atlas/integrations/types";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

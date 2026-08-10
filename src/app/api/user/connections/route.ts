@@ -4,7 +4,6 @@ import { getAtlasActor } from "@/lib/atlas/server/auth";
 import { listUserConnections } from "@/lib/atlas/integrations/registry";
 import { listIntegrations } from "@/lib/atlas/integrations/registry";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

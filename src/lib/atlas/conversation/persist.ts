@@ -60,30 +60,41 @@ export async function appendConversationTurn(input: {
   const { recent, summary } = trimHistoryForModel(input.history, input.previousSummary ?? "");
 
   try {
-    await prisma.$transaction([
-      prisma.message.create({
-        data: {
-          conversationId: input.conversationId,
-          role: "user",
-          content: input.userMessage,
-        },
-      }),
-      prisma.message.create({
-        data: {
-          conversationId: input.conversationId,
-          role: "assistant",
-          content: input.assistantReply,
-          meta: input.meta ? JSON.stringify(input.meta) : null,
-        },
-      }),
-      prisma.conversation.update({
-        where: { id: input.conversationId },
-        data: {
-          summary,
-          lastMessageAt: new Date(),
-        },
-      }),
-    ]);
+    const userData = {
+      conversationId: input.conversationId,
+      role: "user" as const,
+      content: input.userMessage,
+    };
+    const assistantData = {
+      conversationId: input.conversationId,
+      role: "assistant" as const,
+      content: input.assistantReply,
+      meta: input.meta ? JSON.stringify(input.meta) : null,
+    };
+
+    if (process.env.NEXT_RUNTIME === "edge") {
+      // Cloudflare (D1): interactive transactions are unsupported by the D1
+      // adapter, so persist with independent writes (preserves D1 behavior).
+      await Promise.all([
+        prisma.message.create({ data: userData }),
+        prisma.message.create({ data: assistantData }),
+        prisma.conversation.update({
+          where: { id: input.conversationId },
+          data: { summary, lastMessageAt: new Date() },
+        }),
+      ]);
+    } else {
+      // Postgres runtime (Cloud Run / local dev): user message, assistant
+      // message, and conversation update commit together or not at all.
+      await prisma.$transaction(async (tx) => {
+        await tx.message.create({ data: userData });
+        await tx.message.create({ data: assistantData });
+        await tx.conversation.update({
+          where: { id: input.conversationId },
+          data: { summary, lastMessageAt: new Date() },
+        });
+      });
+    }
   } catch (error) {
     logStructured("conversation.persist_failed", {
       conversationId: input.conversationId,

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { scryptAsync } from "@noble/hashes/scrypt.js";
 
 // better-auth defaults to a pure-JS scrypt (N=16384, r=16) via @noble/hashes.
 // On Cloudflare Workers free tier (10 ms CPU per request) that consistently
@@ -86,6 +85,10 @@ async function verifyLegacyScrypt(stored: string, password: string): Promise<boo
   // better-auth's default passes the salt to scrypt as the hex string itself
   // (TextEncoder → UTF-8 bytes of the 32-char hex), so we must replicate that
   // exactly rather than decoding to raw bytes.
+  
+  // Lazy import to avoid blowing Cloudflare's 10ms-50ms CPU budget on every Edge worker invocation
+  const { scryptAsync } = await import("@noble/hashes/scrypt.js");
+  
   const target = await scryptAsync(password.normalize("NFKC"), saltHex, {
     N: 16384,
     r: 16,

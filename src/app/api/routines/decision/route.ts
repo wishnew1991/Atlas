@@ -4,7 +4,6 @@ import { routines } from "@/lib/atlas/routines";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

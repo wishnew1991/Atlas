@@ -4,7 +4,6 @@ import { synthesizeSpeech, isPiperAvailable } from "@/lib/atlas/server/piper-tts
 import { resolveConfiguredTtsTarget } from "@/lib/atlas/server/voice-routing";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

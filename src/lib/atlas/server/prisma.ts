@@ -23,6 +23,12 @@ async function getClient(): Promise<PrismaClient> {
     }
     const { PrismaClient: EdgePrismaClient } = await import("@prisma/client/edge");
     client = new EdgePrismaClient({ adapter: new PrismaD1(db) });
+  } else if (process.env.DATABASE_URL?.startsWith("postgres")) {
+    // GCP Cloud Run (NODE_RUNTIME=nodejs). Postgres via the node-postgres adapter.
+    const { PrismaPg } = await import("@prisma/adapter-pg");
+    client = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    });
   } else {
     // Local development (Node.js `next dev`) falls back to better-sqlite3.
     const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
@@ -31,18 +37,21 @@ async function getClient(): Promise<PrismaClient> {
     });
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client;
-  }
+  globalForPrisma.prisma = client;
   return client;
 }
 
-function makeLazyProxy(path: (string | symbol)[] = []): unknown {
+export function makeLazyProxy(
+  resolveClient: () => Promise<unknown> = getClient,
+  path: (string | symbol)[] = []
+): unknown {
   const call = (...args: unknown[]) => {
     const segments = path;
-    return getClient().then((client) => {
-      let target: unknown = client as unknown;
+    return resolveClient().then((client) => {
+      let owner: unknown = client;
+      let target: unknown = client;
       for (const segment of segments) {
+        owner = target;
         target = (target as Record<string | symbol, unknown>)[segment];
       }
       if (typeof target !== "function") {
@@ -50,14 +59,17 @@ function makeLazyProxy(path: (string | symbol)[] = []): unknown {
           `Prisma path "${segments.join(".")}" resolved to a non-function value.`
         );
       }
-      return (target as (...callArgs: unknown[]) => unknown)(...args);
+      // Preserve `this` on the owning object so client methods that read
+      // instance state (e.g. `$transaction` accessing `this._tracingHelper`)
+      // run with the correct receiver instead of an undefined one.
+      return (target as (...callArgs: unknown[]) => unknown).apply(owner, args);
     });
   };
 
   return new Proxy(call, {
     get(_target, prop) {
       if (prop === "then") return undefined;
-      return makeLazyProxy([...path, prop]);
+      return makeLazyProxy(resolveClient, [...path, prop]);
     },
     apply(_target, _thisArg, args) {
       return call(...args);

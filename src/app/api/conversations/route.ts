@@ -4,7 +4,6 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { loadLatestConversationSnapshot } from "@/lib/atlas/conversation/persist";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

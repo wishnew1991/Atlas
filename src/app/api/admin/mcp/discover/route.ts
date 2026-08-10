@@ -7,7 +7,6 @@ import { classifyMcpServer } from "@/lib/atlas/mcp/roles";
 import { invalidateToolCache, primeToolCache, setCachedCapabilities } from "@/lib/atlas/mcp/registry";
 import { prisma } from "@/lib/atlas/server/prisma";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

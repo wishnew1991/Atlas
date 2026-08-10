@@ -8,7 +8,6 @@ import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { LlmRequestError } from "@/lib/atlas/llm/errors";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

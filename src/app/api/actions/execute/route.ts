@@ -4,7 +4,6 @@ import { executeAtlasAction } from "@/lib/atlas/server/atlas-agent";
 import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth";
 
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { readRegistry, addDomain, removeDomain } from "@/lib/atlas/server/model-registry";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 

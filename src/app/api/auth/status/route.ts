@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getAtlasActor, isAtlasAdminActor } from "@/lib/atlas/server/auth";
 import { prisma } from "@/lib/atlas/server/prisma";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /** GET /api/auth/status — lightweight actor gate for client-side page shells. */

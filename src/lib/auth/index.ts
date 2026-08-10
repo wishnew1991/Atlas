@@ -3,15 +3,28 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { serverPassword } from "@/lib/atlas/server-password";
 
+const isPostgres = process.env.DATABASE_URL?.startsWith("postgres");
+
+function resolveSecret(): string {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "BETTER_AUTH_SECRET is required in production (was previously falling back to a hardcoded dev secret)."
+    );
+  }
+  return "dev-only-insecure-secret-do-not-use-in-production";
+}
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: "sqlite",
+    provider: isPostgres ? "postgresql" : "sqlite",
   }),
-  secret: process.env.BETTER_AUTH_SECRET || "preview-secret-replace-me",
+  secret: resolveSecret(),
   baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS 
-    ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map(o=>o.trim()) 
-    : ["https://atlas-9um.pages.dev", "https://admin.atlas-9um.pages.dev", "http://localhost:3000", "http://localhost:8788"],
+  trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS
+    ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((o) => o.trim())
+    : ["http://localhost:3000"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,

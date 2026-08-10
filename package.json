@@ -41,6 +41,7 @@
     "@noble/hashes": "2.3.0",
     "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/adapter-d1": "^7.9.1",
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@types/pg": "^8.20.3",
     "better-auth": "^1.6.26",
