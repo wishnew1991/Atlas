@@ -5619,6 +5619,25 @@ select:focus-visible {
   max-width: 48ch;
 }
 
+.atlas-device-gate__enter {
+  margin-top: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.atlas-device-gate__enter:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
 /* Local desktop preview: render the mobile app inside a centered phone frame. */
 .atlas-local-preview {
   min-height: 100vh;

@@ -85,8 +85,15 @@ export function MobileOnly({ children }: { children: React.ReactNode }) {
         </ul>
         <div className="atlas-device-gate__cta">
           <p>Atlas is designed for your phone — it redirects you to apps like Google Pay and PhonePe to complete payments, and shows your live order status in-app.</p>
+          <button
+            type="button"
+            className="atlas-device-gate__enter"
+            onClick={() => setMode("local-frame")}
+          >
+            Continue in desktop preview →
+          </button>
           <p className="atlas-device-gate__hint">
-            Open this link on a mobile device to try Atlas.
+            Best experienced on a mobile device.
           </p>
         </div>
       </div>
