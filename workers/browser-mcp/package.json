@@ -1,0 +1,19 @@
+{
+  "name": "browser-mcp",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "dotenv": "^17.4.2",
+    "playwright": "^1.62.1"
+  }
+}

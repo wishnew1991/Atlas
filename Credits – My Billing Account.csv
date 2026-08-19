@@ -1,0 +1,4 @@
+Credit name,Status,Currency,Percentage remaining,Remaining value,Original value,Type,Credit ID,Scope,Start date,End date,Credit application type
+Free Trial,Expired,$,100,300.00,300.00,One-time,FreeTrial:Credit-01D3AF-BAD595-3831C5,Certain usage; see the terms for free trial.,2026-07-29,2026-08-08,Net pricing,
+Free Trial,Available,$,98.96110999999999,296.88,300.00,One-time,FreeTrialUpgrade:CreditId-FreeTrial:Credit-01D3AF-BAD595-3831C5,Certain usage; see the terms for free trial.,2026-08-08,2026-10-28,Net pricing,
+Google Developer Program premium benefit - CREDIT_TYPE_MONTHLY,Available,$,100,10.00,10.00,One-time,66cfd7db-ee90-4462-8558-a4a7c414bd86-CREDIT_TYPE_MONTHLY-93562f33-26c7-4aa4-8e4e-fae4995a639a,Following services: All of Google Cloud Platform and Google Maps APIs.,2026-08-08,2027-08-08,List pricing,
