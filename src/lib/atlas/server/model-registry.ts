@@ -45,6 +45,7 @@ export interface AtlasVoiceConfig {
   sttMode: VoiceSttMode;
   /** Device vs server TTS preference (Capacitor-ready). */
   ttsMode: VoiceTtsMode;
+  dailyVoiceLimitMinutes: number;
 }
 
 export interface AtlasModelRegistry {

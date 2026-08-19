@@ -30,8 +30,9 @@ export interface AuthMethod {
 export interface IntegrationDefinition {
   id: string;                     // "swiggy", "zomato", "amazon"
   name: string;                   // "Swiggy", "Zomato", "Amazon"
-  transport: TransportKind;       // "mcp" | "rest" | "sdk" | "graphql"
+  transport: TransportKind;       // "mcp" | "rest" | "sdk" | "graphql" | "browser"
   authMethods: AuthMethod[];
+  transportOrderJson: string;     // JSON: TransportKind[]
   icon?: string;
   description?: string;
   enabled: boolean;

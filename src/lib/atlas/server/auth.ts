@@ -16,6 +16,7 @@ export interface AtlasCapabilities {
 export interface AtlasActor {
   userId: string;
   name?: string;
+  email?: string;
   isAuthenticated: boolean;
   capabilities: AtlasCapabilities;
 }
@@ -51,7 +52,13 @@ export async function getAtlasActor(): Promise<AtlasActor> {
 
       if (session?.user) {
         const capabilities = await buildCapabilities(true);
-        return { userId: session.user.id, name: session.user.name, isAuthenticated: true, capabilities };
+        // Fetch email from AtlasUser
+        const { prisma } = await import("@/lib/atlas/server/prisma");
+        const atlasUser = await prisma.atlasUser.findUnique({
+          where: { clerkId: session.user.id },
+          select: { email: true },
+        });
+        return { userId: session.user.id, name: session.user.name, email: atlasUser?.email ?? undefined, isAuthenticated: true, capabilities };
       }
     }
   } catch (err) {
