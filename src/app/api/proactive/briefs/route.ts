@@ -4,6 +4,7 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { listUserBriefs } from "@/lib/proactive/persist";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /** GET /api/proactive/briefs — this user's delivered briefs (real data only). */
 export async function GET(request: Request) {

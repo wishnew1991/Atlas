@@ -483,6 +483,7 @@ model Integration {
   configs         IntegrationConfig[]
   connections     UserConnection[]
   skills          Skill[]
+  audits          ConnectorAudit[]
 }
 
 model IntegrationCapability {
@@ -573,4 +574,62 @@ model Skill {
   updatedAt       DateTime @updatedAt
 
   @@index([capabilityId])
+}
+
+model VoiceUsage {
+  id        String   @id
+  userId    String
+  day       String
+  seconds   Int      @default(0)
+  updatedAt DateTime
+
+  @@unique([userId, day])
+  @@index([userId])
+}
+
+model ConnectorAudit {
+  id            String   @id
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  userId        String?
+  action        String
+  resource      String?
+  status        String
+  detailsJson  String
+  createdAt     DateTime @default(now())
+
+  @@index([integrationId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ProactiveBrief {
+  id             String    @id
+  userId         String
+  triggerType    String
+  period         String
+  status         String    @default("delivered")
+  title          String
+  itemsJson      String    @default("[]")
+  synthetic      Boolean   @default(false)
+  deliveredAt    DateTime  @default(now())
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, triggerType, period])
+  @@index([userId, deliveredAt])
+}
+
+model ProactiveTrigger {
+  id          String    @id
+  userId      String
+  triggerType String
+  schedule    String    @default("07:00")
+  enabled     Boolean   @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, triggerType])
 }

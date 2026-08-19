@@ -112,6 +112,7 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
       ttsPitch: voice?.ttsPitch ?? 1,
       sttModelId: voice?.sttModelId ?? "",
       ttsModelId: voice?.ttsModelId ?? "local:piper",
+      dailyVoiceLimitMinutes: voice?.dailyVoiceLimitMinutes ?? 60,
       sttMode: parseVoiceSttMode(voice?.sttMode),
       ttsMode: parseVoiceTtsMode(voice?.ttsMode),
     },

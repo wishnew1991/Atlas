@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { prisma } from "@/lib/atlas/server/prisma";
 import { upsertMcpServer, deleteMcpServer, writeVoiceConfig } from "@/lib/atlas/server/model-registry";
@@ -7,6 +6,7 @@ import { invalidateToolCache } from "@/lib/atlas/mcp/registry";
 import { encryptSecret } from "@/lib/security/secrets";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   try {
@@ -142,7 +142,7 @@ export async function POST(request: Request) {
       } else if (action === "install_skill") {
         await prisma.skill.create({
           data: {
-            id: args.id as string || randomUUID(),
+            id: args.id as string || crypto.randomUUID(),
             name: args.name as string,
             category: (args.category as string) || "action",
             capabilityId: args.capabilityId as string,

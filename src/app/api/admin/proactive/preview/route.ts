@@ -4,6 +4,7 @@ import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { evaluateForUser } from "@/lib/proactive/engine";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /**
  * GET /api/admin/proactive/preview

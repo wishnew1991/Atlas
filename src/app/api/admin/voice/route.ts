@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       typeof payload.ttsModelId === "string" && payload.ttsModelId.trim()
         ? payload.ttsModelId.trim()
         : LOCAL_PIPER_TTS_ID,
+    dailyVoiceLimitMinutes: typeof payload.dailyVoiceLimitMinutes === "number" ? payload.dailyVoiceLimitMinutes : 60,
     sttMode: parseVoiceSttMode(payload.sttMode),
     ttsMode: parseVoiceTtsMode(payload.ttsMode),
   };

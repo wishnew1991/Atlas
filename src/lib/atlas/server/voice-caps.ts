@@ -123,7 +123,7 @@ export async function recordVoiceUsage(userId: string, seconds: number): Promise
 
   await prisma.voiceUsage.upsert({
     where: { userId_day: { userId, day } },
-    create: { userId, day, seconds: amount },
-    update: { seconds: { increment: amount } },
+    create: { id: crypto.randomUUID(), userId, day, seconds: amount, updatedAt: new Date() },
+    update: { seconds: { increment: amount }, updatedAt: new Date() },
   });
 }

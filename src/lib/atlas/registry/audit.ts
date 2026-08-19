@@ -19,6 +19,7 @@ export async function recordConnectorAudit(input: ConnectorAuditInput): Promise<
   try {
     await prisma.connectorAudit.create({
       data: {
+        id: crypto.randomUUID(),
         integrationId: input.integrationId,
         userId: input.userId ?? null,
         action: input.action,

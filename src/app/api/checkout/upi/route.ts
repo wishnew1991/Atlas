@@ -5,6 +5,7 @@ import { CheckoutError, completeUpiOrder, createUpiOrderForUser } from "@/lib/at
 import { resolveEffectiveTier, setUserTier, type TierId } from "@/lib/atlas/server/tiers";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const PLAN_RANK: Record<TierId, number> = { free: 0, premium: 1, vip: 2 };
 

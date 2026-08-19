@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { ADMIN_GUIDE_MARKDOWN as guideContent } from "@/lib/atlas/admin-guide";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { chat, type LlmMessage, type LlmTool } from "@/lib/atlas/llm";
 import { resolveActiveModel } from "@/lib/atlas/server/agent/reply";
@@ -10,17 +9,10 @@ import { upsertMcpServer, deleteMcpServer, readVoiceConfig, writeVoiceConfig } f
 import { invalidateToolCache } from "@/lib/atlas/mcp/registry";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const getAdminSystemPrompt = () => {
-  let guideContext = "";
-  try {
-    const guidePath = path.join(process.cwd(), "docs/admin_guide.md");
-    if (fs.existsSync(guidePath)) {
-      guideContext = fs.readFileSync(guidePath, "utf-8");
-    }
-  } catch (err) {
-    console.error("Failed to load admin guide context:", err);
-  }
+  let guideContext = guideContent;
 
   return `You are the Atlas Admin Co-Pilot. You help the system administrator manage the Atlas application.
 You can read the current system configuration, add or remove MCP servers, configure connectors, register skills, setup LLM providers, and configure Voice (STT & TTS) channels.

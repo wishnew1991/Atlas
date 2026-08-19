@@ -5,6 +5,7 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { acknowledgeBrief } from "@/lib/proactive/persist";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /** POST /api/proactive/briefs/[id]/ack — mark the user's brief as acknowledged. */
 export async function POST(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

@@ -21,6 +21,7 @@ export async function listIntegrations(): Promise<IntegrationDefinition[]> {
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,
@@ -38,6 +39,7 @@ export interface CreateIntegrationInput {
   id: string;
   name: string;
   transport: IntegrationDefinition["transport"];
+  transportOrderJson?: string;
   authMethods: AuthMethod[];
   icon?: string;
   description?: string;
@@ -54,6 +56,7 @@ export async function createIntegration(
       id: data.id,
       name: data.name,
       transport: data.transport,
+      transportOrderJson: data.transportOrderJson,
       authMethodsJson: JSON.stringify(data.authMethods),
       icon: data.icon,
       description: data.description,
@@ -68,6 +71,7 @@ export async function createIntegration(
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,
@@ -84,6 +88,7 @@ export async function createIntegration(
 export interface UpdateIntegrationInput {
   name?: string;
   transport?: IntegrationDefinition["transport"];
+  transportOrderJson?: string;
   authMethods?: AuthMethod[];
   icon?: string | null;
   description?: string | null;
@@ -105,6 +110,7 @@ export async function updateIntegration(
     data: {
       ...(fields.name !== undefined ? { name: fields.name } : {}),
       ...(fields.transport !== undefined ? { transport: fields.transport } : {}),
+      ...(fields.transportOrderJson !== undefined ? { transportOrderJson: fields.transportOrderJson } : {}),
       ...(fields.authMethods !== undefined
         ? { authMethodsJson: JSON.stringify(fields.authMethods) }
         : {}),
@@ -137,6 +143,7 @@ export async function updateIntegration(
       id: refreshed.id,
       name: refreshed.name,
       transport: refreshed.transport as IntegrationDefinition["transport"],
+      transportOrderJson: refreshed.transportOrderJson,
       authMethods: JSON.parse(refreshed.authMethodsJson) as AuthMethod[],
       icon: refreshed.icon ?? undefined,
       description: refreshed.description ?? undefined,
@@ -154,6 +161,7 @@ export async function updateIntegration(
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,
@@ -191,6 +199,7 @@ export async function getIntegration(id: string): Promise<IntegrationDefinition 
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,
@@ -220,6 +229,7 @@ export async function getIntegrationsForCapability(
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,

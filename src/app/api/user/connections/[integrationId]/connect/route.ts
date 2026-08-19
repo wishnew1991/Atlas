@@ -9,6 +9,7 @@ import { encryptSecret } from "@/lib/security/secrets";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 
 export async function POST(

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/atlas/server/prisma";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET(request: Request) {
   try {

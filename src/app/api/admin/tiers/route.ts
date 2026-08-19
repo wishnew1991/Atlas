@@ -3,6 +3,7 @@ import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 import { readTierPlans, saveTierPlans, TIER_IDS, type TierPlan } from "@/lib/atlas/server/tiers";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /** GET /api/admin/tiers — per-tier limits (rpm, tokens/day, voice minutes). */
 export async function GET() {

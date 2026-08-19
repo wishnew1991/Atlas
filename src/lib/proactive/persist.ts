@@ -82,6 +82,7 @@ export async function persistBrief(input: PersistBriefInput): Promise<{
   created: boolean;
 }> {
   const data = {
+    id: crypto.randomUUID(),
     userId: input.userId,
     triggerType: input.triggerType,
     period: input.period,

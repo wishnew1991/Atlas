@@ -4,6 +4,7 @@ import { listProviders, createProvider } from "@/lib/atlas/registry";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   try {

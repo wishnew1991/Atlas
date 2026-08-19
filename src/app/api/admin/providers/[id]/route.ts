@@ -4,6 +4,7 @@ import { getProvider, updateProvider, deleteProvider, recordProviderTest } from 
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET(
   _request: Request,

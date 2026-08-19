@@ -3,17 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  parseVoiceSttMode,
   parseVoiceTtsMode,
   ttsEngineOrder,
+  type VoiceSttMode,
   type VoiceTtsMode,
 } from "@/lib/atlas/voice-modes";
 import {
   createNativeRecognition,
-  extractFinalTranscript,
   extractTranscript,
   isNativeSttAvailable,
   isNativeTtsAvailable,
-  loadNativeVoices,
   type NativeSpeechRecognition,
 } from "@/lib/atlas/voice-native";
 
@@ -23,6 +23,7 @@ type SessionConfig = {
   sttLanguage: string;
   ttsRate: number;
   ttsPitch: number;
+  sttMode: VoiceSttMode;
   ttsMode: VoiceTtsMode;
   voiceEnabled: boolean;
   tier: "free" | "premium" | "vip";
@@ -111,6 +112,7 @@ export function useVoiceSession() {
     sttLanguage: "en-US",
     ttsRate: 1,
     ttsPitch: 1,
+    sttMode: "native_first",
     ttsMode: "server_first",
     voiceEnabled: true,
     tier: "free",
@@ -129,9 +131,6 @@ export function useVoiceSession() {
   const nativeUsedRef = useRef(false);
 
   useEffect(() => {
-    // Preload device TTS voices so the first reply can pick a natural voice.
-    void loadNativeVoices();
-
     let active = true;
     fetch("/api/voice-config")
       .then((response) => response.json())
@@ -143,6 +142,7 @@ export function useVoiceSession() {
             sttLanguage?: string;
             ttsRate?: number;
             ttsPitch?: number;
+            sttMode?: unknown;
             ttsMode?: unknown;
             voiceEnabled?: boolean;
           };
@@ -160,6 +160,7 @@ export function useVoiceSession() {
             sttLanguage: data.voice.sttLanguage ?? "en-US",
             ttsRate: data.voice.ttsRate ?? 1,
             ttsPitch: data.voice.ttsPitch ?? 1,
+            sttMode: parseVoiceSttMode(data.voice.sttMode),
             ttsMode: parseVoiceTtsMode(data.voice.ttsMode),
             voiceEnabled: data.voice.voiceEnabled !== false,
             tier,
@@ -761,7 +762,7 @@ const markSpeaking = useCallback(() => {
         setLiveCaption(interimText);
       }
 
-      const finalText = extractFinalTranscript(event);
+      const finalText = extractTranscript(event);
       if (!finalText) return;
 
       // Accumulate final segments of the same utterance (Chrome fires one

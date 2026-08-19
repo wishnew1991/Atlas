@@ -49,6 +49,7 @@ export interface SkillDefinition {
 }
 
 export interface ProviderInput {
+  id?: string;
   name: string;
   kind?: ProviderKind;
   baseUrl?: string;
@@ -62,6 +63,7 @@ export interface ProviderInput {
 }
 
 export interface SkillInput {
+  id?: string;
   name: string;
   category?: string;
   description?: string;
@@ -184,6 +186,7 @@ export async function getProvider(id: string): Promise<ProviderDefinition | null
 export async function createProvider(input: ProviderInput): Promise<ProviderDefinition> {
   const row = await prisma.provider.create({
     data: {
+      id: input.id ?? crypto.randomUUID(),
       name: input.name,
       kind: input.kind ?? "mcp",
       baseUrl: input.baseUrl,
@@ -256,6 +259,7 @@ export async function getSkill(id: string): Promise<SkillDefinition | null> {
 export async function createSkill(input: SkillInput): Promise<SkillDefinition> {
   const row = await prisma.skill.create({
     data: {
+      id: input.id ?? crypto.randomUUID(),
       name: input.name,
       category: input.category ?? "action",
       description: input.description,

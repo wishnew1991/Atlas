@@ -5,6 +5,7 @@ import { AtlasAuthenticationError, getAtlasActor } from "@/lib/atlas/server/auth
 import { readUserPreference, writeUserPreference, touchTriggerRun } from "@/lib/proactive/config";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /** GET /api/proactive/prefs — the user's Daily Brief participation settings. */
 export async function GET() {

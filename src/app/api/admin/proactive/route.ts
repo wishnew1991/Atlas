@@ -5,6 +5,7 @@ import { readAdminDefaults, writeAdminDefaults } from "@/lib/proactive/config";
 import { requireAtlasAdmin } from "@/lib/atlas/server/auth";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /** GET /api/admin/proactive — global Daily Brief defaults (admin only). */
 export async function GET() {

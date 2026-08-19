@@ -101,7 +101,7 @@ export async function writeUserPreference(
 
   await prisma.proactiveTrigger.upsert({
     where: { userId_triggerType: { userId, triggerType } },
-    create: { userId, triggerType, schedule, enabled },
+    create: { id: crypto.randomUUID(), userId, triggerType, schedule, enabled },
     update: { schedule, enabled },
   });
 
@@ -115,7 +115,7 @@ export async function touchTriggerRun(
 ): Promise<void> {
   await prisma.proactiveTrigger.upsert({
     where: { userId_triggerType: { userId, triggerType } },
-    create: { userId, triggerType, schedule: SYSTEM_DEFAULTS.triggerTime, enabled: true, lastRunAt: at },
+    create: { id: crypto.randomUUID(), userId, triggerType, schedule: SYSTEM_DEFAULTS.triggerTime, enabled: true, lastRunAt: at },
     update: { lastRunAt: at },
   });
 }
