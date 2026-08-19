@@ -61,6 +61,12 @@ export async function POST(request: Request) {
         : LOCAL_PIPER_TTS_ID,
     sttMode: parseVoiceSttMode(payload.sttMode),
     ttsMode: parseVoiceTtsMode(payload.ttsMode),
+    dailyVoiceLimitMinutes:
+      typeof payload.dailyVoiceLimitMinutes === "number" &&
+      Number.isFinite(payload.dailyVoiceLimitMinutes) &&
+      payload.dailyVoiceLimitMinutes >= 0
+        ? Math.floor(payload.dailyVoiceLimitMinutes)
+        : 15,
   };
 
   const saved = await writeVoiceConfig(voice);

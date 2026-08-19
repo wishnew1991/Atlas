@@ -191,6 +191,7 @@ export async function getIntegration(id: string): Promise<IntegrationDefinition 
     id: row.id,
     name: row.name,
     transport: row.transport as IntegrationDefinition["transport"],
+    transportOrderJson: row.transportOrderJson,
     authMethods: JSON.parse(row.authMethodsJson) as AuthMethod[],
     icon: row.icon ?? undefined,
     description: row.description ?? undefined,

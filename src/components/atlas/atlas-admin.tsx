@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 
 import type {
   AtlasActionDomain,
@@ -11,6 +14,11 @@ import type {
 import type { IntegrationDefinition, AuthMethod } from "@/lib/atlas/integrations/types";
 import { TRANSPORT_KINDS } from "@/lib/atlas/integrations/types";
 import { IntegrationAvatar } from "@/components/atlas/integration-avatar";
+import { AdminDailyBriefPanel } from "@/components/atlas/admin-daily-brief";
+import { ConnectorAuditPanel } from "@/components/atlas/connector-audit-panel";
+import { ConnectorRecipesPanel } from "@/components/atlas/connector-recipes-panel";
+import { SkillsPanel } from "@/components/atlas/skills-panel";
+import { ProvidersPanel } from "@/components/atlas/providers-panel";
 import { isCanonicalCapability, type CanonicalCapability } from "@/lib/atlas/capabilities/types";
 import {
   STT_MODE_LABELS,
@@ -35,11 +43,11 @@ interface RoutingRule {
   modelId: string;
 }
 
-const providers: AtlasProvider[] = ["openai", "anthropic", "google", "nvidia", "custom"];
+const providers: AtlasProvider[] = ["openai", "anthropic", "google", "nvidia", "custom", "openrouter"];
 
-const builtInDomains = ["shopping", "travel", "food", "rides", "appointments"];
+const builtInDomains = ["shopping", "travel", "food", "rides", "appointments", "admin"];
 
-type AdminTab = "llm" | "integrations" | "mcp" | "search" | "domains" | "voice" | "logs";
+type AdminTab = "llm" | "integrations" | "connector-audit" | "connector-recipes" | "mcp" | "search" | "domains" | "voice" | "logs" | "brief" | "skills" | "providers";
 
 const adminNav: ReadonlyArray<{
   group: string;
@@ -53,9 +61,18 @@ const adminNav: ReadonlyArray<{
     ],
   },
   {
-    group: "Platform",
+    group: "Connectors",
     items: [
-      { id: "integrations", label: "Integrations" },
+      { id: "integrations", label: "Connectors" },
+      { id: "connector-audit", label: "Audit" },
+      { id: "connector-recipes", label: "Recipes" },
+    ],
+  },
+  {
+    group: "Registry",
+    items: [
+      { id: "skills", label: "Skills" },
+      { id: "providers", label: "Providers" },
     ],
   },
   {
@@ -70,6 +87,7 @@ const adminNav: ReadonlyArray<{
     group: "Experience",
     items: [
       { id: "voice", label: "Voice" },
+      { id: "brief", label: "Daily Brief" },
     ],
   },
 ];
@@ -80,6 +98,7 @@ const providerMeta: Record<AtlasProvider, { label: string; hint: string; baseHin
   google: { label: "Google", hint: "ai.google.dev", baseHint: "https://generativelanguage.googleapis.com/v1beta" },
   nvidia: { label: "NVIDIA", hint: "build.nvidia.com", baseHint: "https://integrate.api.nvidia.com/v1" },
   custom: { label: "Custom", hint: "OpenAI-compatible endpoint" },
+  openrouter: { label: "OpenRouter", hint: "openrouter.ai", baseHint: "https://openrouter.ai/api/v1" },
 };
 function modelDisplayName(model: ModelConfig, credentials: AtlasCredential[]): string {
   const cred = credentials.find((c) => c.id === model.credentialId);
@@ -300,6 +319,8 @@ function LlmLogsPanel() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "ok" | "failed">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -339,13 +360,27 @@ function LlmLogsPanel() {
           </p>
         </div>
 
-        <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
+        <div className="atlas-chip-row" style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: "8px" }}>
           <span className="atlas-badge atlas-badge--blue">{total} total</span>
           <span className={`atlas-badge ${successCount === logs.length && logs.length > 0 ? "atlas-badge--green" : ""}`}>
             {successCount}/{logs.length} success
           </span>
           <span className="atlas-badge">{tokensInTotal} tokens in</span>
           <span className="atlas-badge">{tokensOutTotal} tokens out</span>
+        </div>
+
+        <div className="atlas-chip-row" style={{ marginBottom: 16, display: "flex", gap: "8px" }}>
+          <select 
+            className="atlas-action atlas-action--ghost atlas-action--small"
+            style={{ padding: "4px 8px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "4px", color: "var(--text)" }}
+            value={filter} 
+            onChange={(e) => setFilter(e.target.value as "all" | "ok" | "failed")}
+          >
+            <option value="all">All Logs</option>
+            <option value="ok">Success Only</option>
+            <option value="failed">Failed Only</option>
+          </select>
+
           <button
             type="button"
             className="atlas-action atlas-action--ghost atlas-action--small"
@@ -372,48 +407,82 @@ function LlmLogsPanel() {
           </div>
         ) : (
           <div className="atlas-llm-log">
-            <div className="atlas-llm-log__head">
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--time">Time</span>
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--model">Model</span>
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--tokens">Tokens</span>
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--latency">Latency</span>
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--status">Status</span>
-              <span className="atlas-llm-log__cell atlas-llm-log__cell--tools">Tools</span>
-            </div>
-            {logs.map((log) => (
-              <div className="atlas-llm-log__entry" key={log.id}>
-                <div className="atlas-llm-log__row" data-failed={log.success ? undefined : "true"}>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--time">
-                    {new Date(log.createdAt).toLocaleTimeString()}
-                  </span>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--model">
-                    {log.modelId ?? "—"}
-                    <span className="atlas-llm-log__meta">
-                      {[log.provider, log.domain, log.round > 0 ? `round ${log.round}` : null]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
+            {logs
+              .filter(log => filter === "all" ? true : filter === "ok" ? log.success : !log.success)
+              .map((log) => {
+              const isExpanded = expandedLogId === log.id;
+              return (
+                <div className="atlas-llm-log__entry" key={log.id} data-expanded={isExpanded ? "true" : undefined}>
+                  <button
+                    type="button"
+                    className="atlas-llm-log__row"
+                    data-failed={log.success ? undefined : "true"}
+                    onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                  >
+                    <span className="atlas-llm-log__cell atlas-llm-log__cell--time" data-label="Time">
+                      {new Date(log.createdAt).toLocaleTimeString()}
                     </span>
-                  </span>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--tokens">
-                    {log.tokensIn ?? "–"} → {log.tokensOut ?? "–"}
-                  </span>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--latency">
-                    {log.latencyMs != null ? `${(log.latencyMs / 1000).toFixed(1)}s` : "–"}
-                  </span>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--status">
-                    <span className={`atlas-badge ${log.success ? "atlas-badge--green" : "atlas-badge--red"}`}>
-                      {log.success ? "ok" : "failed"}
+                    <span className="atlas-llm-log__cell atlas-llm-log__cell--model" data-label="Model">
+                      {log.modelId ?? "—"}
                     </span>
-                  </span>
-                  <span className="atlas-llm-log__cell atlas-llm-log__cell--tools">
-                    {parseToolCallList(log.toolCalls).join(", ") || "—"}
-                  </span>
+                    <span className="atlas-llm-log__cell atlas-llm-log__cell--status" data-label="Status">
+                      <span className={`atlas-badge ${log.success ? "atlas-badge--green" : "atlas-badge--red"}`}>
+                        {log.success ? "ok" : "failed"}
+                      </span>
+                    </span>
+                  </button>
+
+                  {isExpanded ? (
+                    <div className="atlas-llm-log__inspector">
+                      <div className="atlas-llm-log__inspector-grid">
+                        <div className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Provider</span>
+                          <span className="atlas-llm-log__inspector-val">{log.provider || "—"}</span>
+                        </div>
+                        <div className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Domain</span>
+                          <span className="atlas-llm-log__inspector-val">{log.domain || "—"}</span>
+                        </div>
+                        <div className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Round</span>
+                          <span className="atlas-llm-log__inspector-val">{log.round || "0"}</span>
+                        </div>
+                        <div className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Latency</span>
+                          <span className="atlas-llm-log__inspector-val">
+                            {log.latencyMs != null ? `${(log.latencyMs / 1000).toFixed(2)}s` : "—"}
+                          </span>
+                        </div>
+                        <div className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Tokens</span>
+                          <span className="atlas-llm-log__inspector-val">
+                            In: {log.tokensIn ?? 0} | Out: {log.tokensOut ?? 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="atlas-llm-log__inspector-section">
+                        <span className="atlas-llm-log__inspector-label">Tools Executed</span>
+                        <div className="atlas-llm-log__inspector-code">
+                          {parseToolCallList(log.toolCalls).length > 0 
+                            ? parseToolCallList(log.toolCalls).join("\n") 
+                            : "None"}
+                        </div>
+                      </div>
+
+                      {!log.success && log.error ? (
+                        <div className="atlas-llm-log__inspector-section">
+                          <span className="atlas-llm-log__inspector-label">Error Output</span>
+                          <div className="atlas-llm-log__inspector-code atlas-llm-log__inspector-code--error">
+                            {log.error}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                {!log.success && log.error ? (
-                  <div className="atlas-llm-log__error">{log.error}</div>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -422,7 +491,11 @@ function LlmLogsPanel() {
 }
 
 export function AtlasAdmin() {
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("llm");
+  const [viewMode, setViewMode] = useState<"menu" | "detail">("menu");
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [routing, setRouting] = useState<RoutingRule[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
@@ -431,6 +504,16 @@ export function AtlasAdmin() {
   const [notice, setNotice] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Admin Co-Pilot Chat Drawer States
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; text: string; card?: any }[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // Model List Filter and Collapse States
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+  const [expandedCredentials, setExpandedCredentials] = useState<Record<string, boolean>>({});
 
   const [selectedCredentialId, setSelectedCredentialId] = useState("");
   const [credentials, setCredentials] = useState<AtlasCredential[]>([]);
@@ -453,6 +536,7 @@ export function AtlasAdmin() {
     ttsModelId: "local:piper",
     sttMode: "native_first",
     ttsMode: "server_first",
+    dailyVoiceLimitMinutes: 15,
   });
   const [sttModelOptions, setSttModelOptions] = useState<{ id: string; label: string }[]>([]);
   const [ttsModelOptions, setTtsModelOptions] = useState<{ id: string; label: string }[]>([]);
@@ -571,6 +655,10 @@ export function AtlasAdmin() {
           ttsModelId: savedTts && ttsIds.has(savedTts) ? savedTts : ttsOptions[0]?.id ?? "",
           sttMode: payload.voice.sttMode ?? "native_first",
           ttsMode: payload.voice.ttsMode ?? "server_first",
+          dailyVoiceLimitMinutes:
+            typeof payload.voice.dailyVoiceLimitMinutes === "number"
+              ? payload.voice.dailyVoiceLimitMinutes
+              : 15,
         });
       }
     } catch {
@@ -856,6 +944,54 @@ export function AtlasAdmin() {
     }
   };
 
+  const sendAdminChatMessage = async (msg: string) => {
+    if (!msg.trim()) return;
+    setChatLoading(true);
+    const userTurn = { role: "user" as const, text: msg };
+    setChatHistory((prev) => [...prev, userTurn]);
+    setChatMessage("");
+
+    try {
+      const response = await fetch("/api/admin/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: msg,
+          history: chatHistory.map(h => ({ role: h.role, text: h.text }))
+        }),
+      });
+
+      const payload = await response.json();
+      if (response.ok) {
+        setChatHistory((prev) => [...prev, { role: "assistant", text: payload.reply, card: payload.card }]);
+        // If a system modification occurred, refresh backend states
+        if (payload.card && payload.card.status === "success") {
+          void load();
+          void loadCredentials();
+          void loadMcpServers();
+          void loadIntegrations();
+        }
+      } else {
+        setChatHistory((prev) => [...prev, { role: "assistant", text: payload.error || "Co-Pilot could not process request." }]);
+      }
+    } catch {
+      setChatHistory((prev) => [...prev, { role: "assistant", text: "Connection error. Please try again." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+    } finally {
+      router.push("/admin/login");
+      router.refresh();
+    }
+  };
+
   const addDomain = async (event: React.FormEvent) => {
     event.preventDefault();
     setNotice(null);
@@ -929,6 +1065,10 @@ export function AtlasAdmin() {
         ttsModelId: payload.voice.ttsModelId ?? "local:piper",
         sttMode: payload.voice.sttMode ?? "native_first",
         ttsMode: payload.voice.ttsMode ?? "server_first",
+        dailyVoiceLimitMinutes:
+          typeof payload.voice.dailyVoiceLimitMinutes === "number"
+            ? payload.voice.dailyVoiceLimitMinutes
+            : 15,
       });
       setNotice("Voice configuration saved. Mic and speak in chat will use these modes and models.");
       setError(null);
@@ -1422,266 +1562,237 @@ export function AtlasAdmin() {
   };
 
   return (
-    <div className="atlas-admin">
-      <aside className="atlas-admin__nav" aria-label="Admin sections">
-        <div className="atlas-admin__nav-head">
-          <p className="atlas-admin__nav-eyebrow">Configure</p>
-          <h1 className="atlas-admin__nav-title">Control plane</h1>
-        </div>
-
-        {adminNav.map((section) => (
-          <div className="atlas-admin__nav-group" key={section.group}>
-            <p className="atlas-admin__nav-group-label">{section.group}</p>
-            {section.items.map((tab) => (
+    <div className="atlas-admin" style={{ display: "flex", width: "100%", height: "100vh", background: "#0b1220", position: "relative", overflow: "hidden" }}>
+      {/* Navigation Sidebar */}
+      <aside
+        className={`atlas-admin-sidebar ${isMobileMenuOpen ? "open" : ""}`}
+        style={{
+          width: 280,
+          background: "#0f172a",
+          borderRight: "1px solid rgba(148, 163, 184, 0.15)",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "24px 18px",
+          height: "100%",
+          zIndex: 100,
+          transition: "transform 0.3s ease-in-out",
+          position: typeof window !== "undefined" && window.innerWidth < 1024 ? "absolute" : "relative",
+          transform: typeof window !== "undefined" && window.innerWidth < 1024 && !isMobileMenuOpen ? "translateX(-100%)" : "translateX(0)"
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 24, overflowY: "auto" }}>
+          {/* Logo Brand */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <p style={{ margin: 0, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "#10b981", fontWeight: 700 }}>Configure</p>
+              <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#f8fafc" }}>Control plane</h1>
+            </div>
+            {isMobileMenuOpen && (
               <button
-                key={tab.id}
                 type="button"
-                className="atlas-admin__nav-link"
-                data-active={activeTab === tab.id ? "true" : "false"}
-                onClick={() => setActiveTab(tab.id)}
-                aria-pressed={activeTab === tab.id}
+                onClick={() => setIsMobileMenuOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 20, cursor: "pointer" }}
               >
-                {tab.label}
+                ✕
               </button>
+            )}
+          </div>
+
+          {/* Grouped Links */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {adminNav.map((section) => (
+              <div key={section.group} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>{section.group}</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {section.items.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(tab.id);
+                          setIsMobileMenuOpen(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          background: isActive ? "rgba(16, 185, 129, 0.1)" : "transparent",
+                          color: isActive ? "#10b981" : "#94a3b8",
+                          border: "none",
+                          fontSize: "0.88rem",
+                          fontWeight: isActive ? 700 : 500,
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
-        ))}
+        </div>
 
-        <div className="atlas-admin__nav-status">
-          <span className={`atlas-badge ${credentials.length > 0 ? "atlas-badge--green" : ""}`}>
-            {credentials.length} provider{credentials.length === 1 ? "" : "s"}
-          </span>
-          <span className={`atlas-badge ${mcpServers.length > 0 ? "atlas-badge--green" : ""}`}>
-            {mcpServers.length} MCP Servers
-          </span>
-          <span className={`atlas-badge ${models.some((m) => m.enabled) ? "atlas-badge--green" : ""}`}>
-            {models.filter((m) => m.enabled).length} models
-          </span>
+        {/* Bottom Pinned Controls */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid rgba(148, 163, 184, 0.1)", paddingTop: 16 }}>
+          <Link
+            href="/"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 40,
+              borderRadius: 8,
+              background: "rgba(255, 255, 255, 0.04)",
+              color: "#f8fafc",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              border: "1px solid rgba(148, 163, 184, 0.15)",
+              transition: "background 0.2s"
+            }}
+          >
+            ← Back to App
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 40,
+              borderRadius: 8,
+              background: "rgba(239, 68, 68, 0.1)",
+              color: "#ef4444",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              border: "1px solid rgba(239, 68, 68, 0.2)",
+              cursor: "pointer",
+              transition: "background 0.2s"
+            }}
+          >
+            {signingOut ? "Signing out…" : "Sign Out"}
+          </button>
         </div>
       </aside>
 
-      <div className="atlas-admin__main">
-        {error ? (
-          <div className="atlas-banner atlas-banner--error">
-            <span className="atlas-banner__dot" aria-hidden="true" />
-            <span>{error}</span>
-          </div>
-        ) : null}
+      {/* Main Workspace Area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflowY: "auto", position: "relative" }}>
+        {/* Top Header for Mobile Menu Toggles */}
+        <header
+          style={{
+            padding: "16px 20px",
+            background: "#0f172a",
+            borderBottom: "1px solid rgba(148, 163, 184, 0.1)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between"
+          }}
+          className="atlas-admin-topbar-mobile"
+        >
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#f8fafc",
+              fontSize: 20,
+              cursor: "pointer"
+            }}
+            className="atlas-admin-menu-toggle-btn"
+          >
+            ☰ Menu
+          </button>
+          <span style={{ fontWeight: 700, color: "#f8fafc", fontSize: "0.95rem" }}>
+            {adminNav.flatMap((g) => g.items).find((t) => t.id === activeTab)?.label}
+          </span>
+          <div style={{ width: 40 }} /> {/* Spacer */}
+        </header>
 
-        {notice ? (
-          <div className="atlas-banner atlas-banner--success">
-            <span className="atlas-banner__dot" aria-hidden="true" />
-            <span>{notice}</span>
-          </div>
-        ) : null}
+        <div className="atlas-admin__main" style={{ flex: 1, padding: "24px 20px", maxWidth: 1000, width: "100%", margin: "0 auto" }}>
+          {error ? (
+            <div className="atlas-banner atlas-banner--error" style={{ marginBottom: 20 }}>
+              <span className="atlas-banner__dot" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          {notice ? (
+            <div className="atlas-banner atlas-banner--success" style={{ marginBottom: 20 }}>
+              <span className="atlas-banner__dot" aria-hidden="true" />
+              <span>{notice}</span>
+            </div>
+          ) : null}
 
       {activeTab === "llm" ? (
         <div className="atlas-admin-panel">
+          {/* Admin Co-Pilot Dedicated Model Config */}
           <section className="atlas-section">
             <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Models</p>
-              <h2 className="atlas-section__title">Routing chain</h2>
+              <p className="atlas-section__eyebrow">Co-Pilot Settings</p>
+              <h2 className="atlas-section__title">Admin Co-Pilot Model</h2>
               <p className="atlas-section__copy">
-                Default model and fallbacks — pulled from all connected providers.
+                Select a dedicated AI model to power your administrative chat co-pilot helper.
               </p>
             </div>
-            <RoutingChain
-              models={models}
-              credentials={credentials}
-              defaultModelId={defaultModelId}
-              onSave={saveProviderChain}
-            />
+            <div className="atlas-card" style={{ padding: 16 }}>
+              <label className="atlas-rchain__field" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="atlas-rchain__field-label" style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--muted)" }}>Co-Pilot Model</span>
+                <select
+                  className="atlas-rchain__select"
+                  style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }}
+                  value={routing.find((r) => r.domain === "admin")?.modelId || defaultModelId}
+                  onChange={(event) => {
+                    void updateDomainRoute("admin", event.target.value);
+                  }}
+                >
+                  <option value={defaultModelId}>Default ({defaultModelId || "none"})</option>
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label || model.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </section>
 
+          {/* Configure Provider Card */}
           <section className="atlas-section">
             <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Embedding</p>
-              <h2 className="atlas-section__title">Memory embedding model</h2>
+              <p className="atlas-section__eyebrow">AI Provider Configuration</p>
+              <h2 className="atlas-section__title">Configure AI Provider</h2>
               <p className="atlas-section__copy">
-                Model used to generate embeddings for long-term memory. Memory is
-                disabled when no embedding model is selected.
-              </p>
-            </div>
-            <div className="atlas-rchain">
-              <div className="atlas-rchain__fields">
-                <label className="atlas-rchain__field">
-                  <span className="atlas-rchain__field-label">Embedding model</span>
-                  <select
-                    className="atlas-rchain__select"
-                    value={embeddingModelId}
-                    onChange={(event) => saveEmbeddingModel(event.target.value)}
-                  >
-                    <option value="">None (memory disabled)</option>
-                    {models
-                      .filter((m) => m.enabled && m.provider !== "anthropic")
-                      .map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {modelDisplayName(model, credentials)}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-            {embeddingModelId && !models.find((m) => m.id === embeddingModelId && m.enabled) ? (
-              <div className="atlas-banner atlas-banner--warn" style={{ marginTop: "0.5rem" }}>
-                The selected embedding model is not enabled. Memory is disabled.
-              </div>
-            ) : null}
-          </section>
-
-          {/* ── Per-Domain Model Routing ── */}
-
-          <section className="atlas-section">
-            <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Model map</p>
-              <h2 className="atlas-section__title">Per-domain model routing</h2>
-              <p className="atlas-section__copy">
-                Assign specific models to action domains. Falls back to the default routing chain when unset.
-              </p>
-            </div>
-
-            <div className="atlas-rows">
-              {domains.map((domain) => {
-                const current = routing.find((entry) => entry.domain === domain)?.modelId || defaultModelId;
-
-                return (
-                  <div className="atlas-row" key={domain}>
-                    <div className="atlas-row__meta">
-                      <div className="atlas-row__title">{domain}</div>
-                      <div className="atlas-row__body">Falls back to default if unset</div>
-                    </div>
-                    <select
-                      className="atlas-action atlas-action--ghost"
-                      value={current}
-                      onChange={(event) => updateDomainRoute(domain, event.target.value)}
-                    >
-                      <option value={defaultModelId}>Default ({defaultModelId || "none"})</option>
-                      {models.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.label || model.id}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* ── Connected Providers ── */}
-
-          <section className="atlas-section">
-            <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Credentials</p>
-              <h2 className="atlas-section__title">Connected providers</h2>
-            </div>
-
-            {credentials.length === 0 ? (
-              <div className="atlas-card atlas-card--soft">
-                <div className="atlas-card__title">No providers connected</div>
-                <div className="atlas-card__body">Add your first provider below to start routing models.</div>
-              </div>
-            ) : (
-              <div className="atlas-prows">
-                {credentials.map((credential) => {
-                  const credentialModels = models.filter((model) => model.credentialId === credential.id);
-                  const fetchedModels = providerModelsByCredential[credential.id] ?? [];
-                  const attachedIds = credentialModels.map((m) => m.id);
-                  const available = fetchedModels.filter((id) => !attachedIds.includes(id));
-                  const fetchError = providerModelsError[credential.id] ?? null;
-
-                  return (
-                    <div className="atlas-prow" key={credential.id}>
-                      <div className="atlas-prow__info">
-                        <span className="atlas-prow__icon" aria-hidden="true">
-                          {credential.label.slice(0, 1).toUpperCase()}
-                        </span>
-                        <div className="atlas-prow__meta">
-                          <span className="atlas-prow__name">{credential.label}</span>
-                          <span className="atlas-prow__detail">
-                            {providerMeta[credential.provider]?.hint}
-                            {credential.baseUrl && credential.provider !== "custom" ? ` · ${credential.baseUrl}` : ""}
-                          </span>
-                        </div>
-                        <span className="atlas-badge atlas-badge--blue">{credential.provider}</span>
-                      </div>
-
-                      <div className="atlas-prow__models">
-                        <span className="atlas-prow__models-label">Models</span>
-                        {credentialModels.length === 0 ? (
-                          <span className="atlas-prow__models-empty">None</span>
-                        ) : (
-                          <select
-                            className="atlas-prow__select"
-                            value=""
-                            onChange={(event) => {
-                              if (event.target.value) deleteModel(event.target.value);
-                            }}
-                          >
-                            <option value="">{credentialModels.length} attached</option>
-                            {credentialModels.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.label || m.id}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-
-                      <div className="atlas-prow__actions">
-                        <AddModelInline
-                          credential={credential}
-                          available={available}
-                          fetchError={fetchError}
-                          onAdd={(modelId) => { void addModelToCredential(credential.id, modelId); }}
-                        />
-                        <button
-                          type="button"
-                          className="atlas-inline-action atlas-prow__remove"
-                          onClick={() => deleteCredential(credential.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="atlas-section">
-            <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Add provider</p>
-              <h2 className="atlas-section__title">Connect a provider</h2>
-              <p className="atlas-section__copy">
-                Pick a provider and paste your API key. Atlas knows the endpoints.
+                Select your preferred provider and input your API key to connect.
               </p>
             </div>
 
             <form className="atlas-card" onSubmit={saveCredential}>
-              <div className="atlas-provider__pickers">
-                {providers.map((provider) => {
-                  const active = credentialForm.provider === provider;
-                  const meta = providerMeta[provider];
-
-                  return (
-                    <button
-                      key={provider}
-                      type="button"
-                      className="atlas-provider__picker"
-                      data-active={active ? "true" : "false"}
-                      onClick={() => setCredentialForm({ ...credentialForm, provider, baseUrl: "" })}
-                    >
-                      <span className="atlas-provider__picker-name">{meta.label}</span>
-                      <span className="atlas-provider__picker-hint">{meta.hint}</span>
-                    </button>
-                  );
-                })}
+              <div className="atlas-assistant__composer-field">
+                <span className="atlas-assistant__composer-label">Select Provider</span>
+                <select
+                  className="atlas-assistant__composer-value"
+                  style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)", width: "100%" }}
+                  value={credentialForm.provider}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, provider: e.target.value as AtlasProvider, baseUrl: "" })}
+                >
+                  {providers.map((p) => (
+                    <option key={p} value={p}>{providerMeta[p]?.label ?? p}</option>
+                  ))}
+                </select>
               </div>
 
-              {credentialForm.provider === "custom" ? (
+              {credentialForm.provider === "custom" && (
                 <label className="atlas-assistant__composer-field">
                   <span className="atlas-assistant__composer-label">Base URL</span>
                   <input
@@ -1692,335 +1803,492 @@ export function AtlasAdmin() {
                     required
                   />
                 </label>
-              ) : null}
+              )}
 
               <label className="atlas-assistant__composer-field">
-                <span className="atlas-assistant__composer-label">API key</span>
+                <span className="atlas-assistant__composer-label">API Key</span>
                 <div className="atlas-provider__key">
                   <input
                     className="atlas-assistant__composer-value"
                     type={showApiKey ? "text" : "password"}
                     value={credentialForm.apiKey}
                     onChange={(event) => setCredentialForm({ ...credentialForm, apiKey: event.target.value })}
-                    placeholder="sk-..."
+                    placeholder={`Enter your ${providerMeta[credentialForm.provider]?.label || ""} API key`}
                     required
                   />
                   <button
                     type="button"
                     className="atlas-provider__key-toggle"
                     onClick={() => setShowApiKey((visible) => !visible)}
-                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                    style={{ background: "transparent", border: "none", color: "var(--muted)", padding: "0 8px", cursor: "pointer" }}
                   >
                     {showApiKey ? "Hide" : "Show"}
                   </button>
                 </div>
               </label>
 
-              <div className="atlas-form__actions">
+              <div className="atlas-form__actions" style={{ marginTop: 12 }}>
                 <button
                   type="submit"
                   className="atlas-action atlas-action--primary"
+                  style={{ width: "100%", justifyContent: "center", minHeight: 48, borderRadius: 12 }}
                   disabled={submitting}
                 >
-                  {submitting ? "Connecting..." : "Connect"}
+                  {submitting ? "Connecting & Fetching..." : "Connect & Fetch Models"}
                 </button>
-                {formError ? (
-                  <div className="atlas-form__error" role="alert">
-                    <span className="atlas-form__error-dot" aria-hidden="true" />
+                {formError && (
+                  <div className="atlas-form__error" role="alert" style={{ marginTop: 12 }}>
                     <span>{formError}</span>
-                    <button
-                      type="button"
-                      className="atlas-form__error-dismiss"
-                      onClick={() => setFormError(null)}
-                      aria-label="Dismiss error"
-                    >
-                      ×
-                    </button>
                   </div>
-                ) : null}
+                )}
               </div>
             </form>
+          </section>
+
+          {/* Dynamic Available Models Table */}
+          <section className="atlas-section">
+            <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Models</p>
+              <h2 className="atlas-section__title">Available Models</h2>
+              <p className="atlas-section__copy">
+                These models were auto-discovered from your connected providers. Toggle to enable/disable them.
+              </p>
+            </div>
+
+            {credentials.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <input
+                  type="text"
+                  value={modelSearchQuery}
+                  onChange={(e) => setModelSearchQuery(e.target.value)}
+                  placeholder="Search available models..."
+                  style={{
+                    width: "100%",
+                    minHeight: 44,
+                    borderRadius: 12,
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                    padding: "0 12px",
+                    fontSize: "0.9rem"
+                  }}
+                />
+              </div>
+            )}
+
+            {credentials.length === 0 ? (
+              <div className="atlas-card atlas-card--soft" style={{ textAlign: "center", padding: 24 }}>
+                <p style={{ color: "var(--muted)" }}>No provider connected yet. Connect a provider above to fetch models.</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {credentials.map((credential) => {
+                  const fetchedModels = providerModelsByCredential[credential.id] ?? [];
+                  
+                  // Filter by search query
+                  const filteredModels = fetchedModels.filter((modelId) =>
+                    modelId.toLowerCase().includes(modelSearchQuery.toLowerCase())
+                  );
+
+                  if (fetchedModels.length === 0) return null;
+                  if (modelSearchQuery && filteredModels.length === 0) return null;
+
+                  const isExpanded = expandedCredentials[credential.id] !== false; // expanded by default
+
+                  return (
+                    <div
+                      key={credential.id}
+                      className="atlas-card"
+                      style={{
+                        padding: 0,
+                        overflow: "hidden",
+                        border: "1px solid rgba(148, 163, 184, 0.15)",
+                        background: "rgba(15, 23, 42, 0.2)"
+                      }}
+                    >
+                      {/* Provider Header Button */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedCredentials((prev) => ({
+                            ...prev,
+                            [credential.id]: !isExpanded
+                          }))
+                        }
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          background: "rgba(15, 23, 42, 0.6)",
+                          border: "none",
+                          padding: "16px 20px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          cursor: "pointer",
+                          color: "#f8fafc"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontWeight: 700, fontSize: "1rem" }}>
+                            {providerMeta[credential.provider]?.label || credential.label} Models
+                          </span>
+                          <span className="atlas-badge atlas-badge--blue" style={{ fontSize: "0.7rem", padding: "2px 8px" }}>
+                            {filteredModels.length} available
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                          {isExpanded ? "▲ Hide" : "▼ Show"}
+                        </span>
+                      </button>
+
+                      {/* Models List */}
+                      {isExpanded && (
+                        <div className="atlas-rows" style={{ borderTop: "1px solid rgba(148, 163, 184, 0.1)" }}>
+                          {filteredModels.map((modelId) => {
+                            const matchedModel = models.find((m) => m.id === modelId && m.credentialId === credential.id);
+                            const isEnabled = matchedModel ? matchedModel.enabled : false;
+
+                            return (
+                              <div
+                                className="atlas-row"
+                                key={`${credential.id}-${modelId}`}
+                                style={{
+                                  padding: "14px 20px",
+                                  borderBottom: "1px solid rgba(148, 163, 184, 0.08)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between"
+                                }}
+                              >
+                                <div className="atlas-row__meta" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "#e2e8f0" }}>{modelId}</span>
+                                  <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                                    {credential.label}
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                  <span style={{ fontSize: "0.75rem", color: isEnabled ? "#10b981" : "var(--muted)" }}>
+                                    {isEnabled ? "Enabled" : "Disabled"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className={`atlas-switch ${isEnabled ? "atlas-switch--active" : ""}`}
+                                    style={{
+                                      width: 46,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      background: isEnabled ? "#10b981" : "#334155",
+                                      position: "relative",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      transition: "background 0.2s"
+                                    }}
+                                    onClick={() => {
+                                      if (isEnabled && matchedModel) {
+                                        void deleteModel(matchedModel.id);
+                                      } else {
+                                        void addModelToCredential(credential.id, modelId);
+                                      }
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        width: 18,
+                                        height: 18,
+                                        borderRadius: "50%",
+                                        background: "#fff",
+                                        position: "absolute",
+                                        top: 3,
+                                        left: isEnabled ? 25 : 3,
+                                        transition: "left 0.2s"
+                                      }}
+                                    />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Default Routing Chain Settings */}
+          <section className="atlas-section">
+            <div className="atlas-section__header">
+              <p className="atlas-section__eyebrow">Routing</p>
+              <h2 className="atlas-section__title">Default Model & Routing</h2>
+            </div>
+            <div className="atlas-card" style={{ padding: 16 }}>
+              <RoutingChain
+                models={models}
+                credentials={credentials}
+                defaultModelId={defaultModelId}
+                onSave={saveProviderChain}
+              />
+            </div>
           </section>
         </div>
       ) : null}
 
       {activeTab === "integrations" ? (
         <div className="atlas-admin-panel">
-          <section className="atlas-section">
-            <div className="atlas-section__header">
-              <p className="atlas-section__eyebrow">Platform</p>
-              <h2 className="atlas-section__title">Integrations</h2>
-              <p className="atlas-section__copy">
-                Manage the service catalog — define integrations, map capabilities, and monitor health.
-              </p>
-            </div>
+          {!selectedIntegrationId && !addIntegrationOpen ? (
+            <>
+              <div className="atlas-section__header">
+                <p className="atlas-section__eyebrow">Connectors</p>
+                <h2 className="atlas-section__title">Connector catalog</h2>
+                <p className="atlas-section__copy">
+                  Manage the connector catalog — define connectors, map capabilities,
+                  transports, and monitor health.
+                </p>
+              </div>
 
-            {/* Stats */}
-            <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
-              <span className="atlas-badge atlas-badge--blue">{integrations.length} total</span>
-              <span className="atlas-badge atlas-badge--green">{integrations.filter((i) => i.enabled).length} enabled</span>
-              <span className="atlas-badge atlas-badge--red">{integrations.filter((i) => !i.enabled).length} disabled</span>
-              <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "healthy").length > 0 ? "atlas-badge--green" : ""}`}>
-                {integrationHealth.filter((h) => h.status === "healthy").length} healthy
-              </span>
-              <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "unconfigured").length > 0 ? "atlas-badge--amber" : ""}`}>
-                {integrationHealth.filter((h) => h.status === "unconfigured").length} unconfigured
-              </span>
-              <span className="atlas-badge atlas-badge--blue">
-                {integrations.filter((i) => i.authMethods.some((m) => m.kind === "oauth2")).length} OAuth
-              </span>
-              <span className="atlas-badge">
-                {integrations.filter((i) => i.authMethods.some((m) => m.kind === "api_key")).length} API key
-              </span>
-            </div>
+              {/* Stats */}
+              <div className="atlas-admin-menu__status" style={{ marginBottom: 24, borderTop: "none", paddingTop: 0 }}>
+                <span className="atlas-badge atlas-badge--blue">{integrations.length} total</span>
+                <span className="atlas-badge atlas-badge--green">{integrations.filter((i) => i.enabled).length} enabled</span>
+                <span className="atlas-badge atlas-badge--red">{integrations.filter((i) => !i.enabled).length} disabled</span>
+                <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "healthy").length > 0 ? "atlas-badge--green" : ""}`}>
+                  {integrationHealth.filter((h) => h.status === "healthy").length} healthy
+                </span>
+                <span className={`atlas-badge ${integrationHealth.filter((h) => h.status === "unconfigured").length > 0 ? "atlas-badge--amber" : ""}`}>
+                  {integrationHealth.filter((h) => h.status === "unconfigured").length} unconfigured
+                </span>
+              </div>
 
-            {/* View toggle */}
-            <div className="atlas-chip-row" style={{ marginBottom: 12 }}>
-              <button
-                type="button"
-                className={`atlas-chip ${integrationsView === "catalog" ? "atlas-chip--primary" : ""}`}
-                onClick={() => { setIntegrationsView("catalog"); setSelectedIntegrationId(null); }}
-              >
-                Catalog
-              </button>
-              <button
-                type="button"
-                className={`atlas-chip ${integrationsView === "capability" ? "atlas-chip--primary" : ""}`}
-                onClick={() => { setIntegrationsView("capability"); setSelectedIntegrationId(null); }}
-              >
-                By Capability
-              </button>
-              <button
-                type="button"
-                className="atlas-action atlas-action--primary atlas-action--small"
-                style={{ marginLeft: "auto" }}
-                onClick={() => setAddIntegrationOpen((v) => !v)}
-              >
-                {addIntegrationOpen ? "Cancel" : "+ Add Integration"}
-              </button>
-            </div>
-
-            {/* Add form */}
-            {addIntegrationOpen ? (
-              <form className="atlas-card" onSubmit={handleAddIntegration} style={{ marginBottom: 14 }}>
-                <div className="atlas-grid atlas-grid--2">
-                  <label className="atlas-assistant__composer-field">
-                    <span className="atlas-assistant__composer-label">ID (slug)</span>
-                    <input className="atlas-assistant__composer-value" value={addIntegrationForm.id} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, id: e.target.value })} placeholder="swiggy" required />
-                  </label>
-                  <label className="atlas-assistant__composer-field">
-                    <span className="atlas-assistant__composer-label">Name</span>
-                    <input className="atlas-assistant__composer-value" value={addIntegrationForm.name} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, name: e.target.value })} placeholder="Swiggy" required />
-                  </label>
-                  <label className="atlas-assistant__composer-field">
-                    <span className="atlas-assistant__composer-label">Transport</span>
-                    <select className="atlas-assistant__composer-value" value={addIntegrationForm.transport} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, transport: e.target.value })}>
-                      {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-                    </select>
-                  </label>
-                  <label className="atlas-assistant__composer-field">
-                    <span className="atlas-assistant__composer-label">Auth Methods (JSON)</span>
-                    <textarea className="atlas-assistant__composer-value" value={addIntegrationForm.authMethods} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, authMethods: e.target.value })} placeholder='[{"kind":"oauth2"}]' rows={2} />
-                  </label>
-                </div>
-                <label className="atlas-assistant__composer-field">
-                  <span className="atlas-assistant__composer-label">Capabilities (JSON)</span>
-                  <textarea className="atlas-assistant__composer-value" value={addIntegrationForm.capabilities} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, capabilities: e.target.value })} placeholder='[{"capabilityId":"food","priority":10}]' rows={2} />
-                </label>
-                <div style={{ marginTop: 14 }}>
-                  <button type="submit" className="atlas-action atlas-action--primary">Create Integration</button>
-                </div>
-              </form>
-            ) : null}
-
-            {/* Catalog View */}
-            {integrationsView === "catalog" ? (
-              <div className="atlas-prows">
+              {/* Connector List */}
+              <div className="atlas-admin-menu__list" style={{ borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", margin: "0 -14px" }}>
                 {integrations.length === 0 ? (
-                  <div className="atlas-card atlas-card--soft">
-                    <div className="atlas-card__title">No integrations yet</div>
-                    <div className="atlas-card__body">Add your first integration above to start building the service catalog.</div>
-                  </div>
+                  <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>No connectors yet</div>
                 ) : (
                   integrations.map((integration) => {
                     const health = integrationHealth.find((h) => h.integrationId === integration.id);
-                    const isSelected = selectedIntegrationId === integration.id;
+                    const requiredScopes = integration.authMethods.flatMap((m) => m.scopes ?? []);
                     return (
-                      <div key={integration.id}>
-                        <div className="atlas-prow" role="button" tabIndex={0} aria-expanded={isSelected} onClick={() => selectIntegration(integration.id)} onKeyDown={(e) => { if (e.key === "Enter") selectIntegration(integration.id); }}>
-                          <div className="atlas-prow__info">
-                            <IntegrationAvatar integrationId={integration.id} name={integration.name} size="md" decorative />
-                            <div className="atlas-prow__meta">
-                              <span className="atlas-prow__name">{integration.name}</span>
-                              <span className="atlas-prow__detail">
-                                {integration.transport.toUpperCase()} · {integration.authMethods.map((m) => m.kind).join(", ")}
-                              </span>
-                            </div>
-                            <span className={`atlas-badge ${integration.enabled ? "atlas-badge--green" : "atlas-badge--red"}`}>
-                              {integration.enabled ? "Active" : "Disabled"}
+                      <button
+                        key={integration.id}
+                        type="button"
+                        className="atlas-admin-menu__row"
+                        style={{ padding: "16px 14px" }}
+                        onClick={() => selectIntegration(integration.id)}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "left" }}>
+                          <span className="atlas-admin-menu__row-label" style={{ fontWeight: 600 }}>{integration.name}</span>
+                          <span className="atlas-chip-row" style={{ gap: 6 }}>
+                            <span className={`atlas-badge ${integration.enabled ? "atlas-badge--green" : "atlas-badge--red"}`} style={{ fontSize: "0.6rem", padding: "4px 8px" }}>
+                              {integration.transport.toUpperCase()}
                             </span>
-                            {health ? (
-                              <span className={`atlas-badge ${health.status === "healthy" ? "atlas-badge--green" : health.status === "unconfigured" ? "atlas-badge--amber" : "atlas-badge--red"}`}>
-                                {health.status}
+                            {requiredScopes.length > 0 ? (
+                              <span className="atlas-badge atlas-badge--blue" style={{ fontSize: "0.6rem", padding: "4px 8px" }}>
+                                {requiredScopes.length} scope{requiredScopes.length === 1 ? "" : "s"}
                               </span>
                             ) : null}
-                          </div>
-                          <div className="atlas-prow__models">
-                            <span className="atlas-prow__models-label">Capabilities</span>
-                            {integration.capabilities.length === 0 ? (
-                              <span className="atlas-prow__models-empty">None</span>
-                            ) : (
-                              <div className="atlas-chip-row">
-                                {integration.capabilities.map((cap) => (
-                                  <span key={cap.capabilityId} className="atlas-chip atlas-chip--quiet">{cap.capabilityId}</span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="atlas-prow__actions">
-                            <button type="button" className="atlas-inline-action" onClick={(e) => { e.stopPropagation(); startEditIntegration(integration); }}>Edit</button>
-                            <button type="button" className="atlas-inline-action" onClick={(e) => { e.stopPropagation(); void handleToggleIntegration(integration.id, !integration.enabled); }}>{integration.enabled ? "Disable" : "Enable"}</button>
-                            <button type="button" className="atlas-inline-action atlas-prow__remove" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete ${integration.name}?`)) void handleDeleteIntegration(integration.id); }}>Delete</button>
-                          </div>
+                            <span style={{ fontSize: "0.7rem", color: "var(--faint)", fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                              {integration.authMethods.map((m) => m.kind).join(", ")}
+                            </span>
+                          </span>
                         </div>
-
-                        {/* Inline Detail + Edit Panel */}
-                        {isSelected ? (
-                          <div className="atlas-card atlas-card--soft" style={{ marginTop: 8, marginBottom: 12 }}>
-                            {editIntegrationOpen ? (
-                              /* Edit mode */
-                              <form onSubmit={(e) => { e.preventDefault(); void handleUpdateIntegration(integration.id); }}>
-                                <div className="atlas-card__eyebrow">Edit — {integration.name}</div>
-                                <div className="atlas-grid atlas-grid--2" style={{ marginTop: 12 }}>
-                                  <label className="atlas-assistant__composer-field">
-                                    <span className="atlas-assistant__composer-label">Name</span>
-                                    <input className="atlas-assistant__composer-value" value={editIntegrationForm.name} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, name: e.target.value })} />
-                                  </label>
-                                  <label className="atlas-assistant__composer-field">
-                                    <span className="atlas-assistant__composer-label">Transport</span>
-                                    <select className="atlas-assistant__composer-value" value={editIntegrationForm.transport} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, transport: e.target.value })}>
-                                      {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-                                    </select>
-                                  </label>
-                                </div>
-                                <label className="atlas-assistant__composer-field">
-                                  <span className="atlas-assistant__composer-label">Auth Methods (JSON)</span>
-                                  <textarea className="atlas-assistant__composer-value" value={editIntegrationForm.authMethods} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, authMethods: e.target.value })} rows={2} />
-                                </label>
-                                <label className="atlas-assistant__composer-field">
-                                  <span className="atlas-assistant__composer-label">Capabilities (JSON)</span>
-                                  <textarea className="atlas-assistant__composer-value" value={editIntegrationForm.capabilities} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, capabilities: e.target.value })} rows={2} />
-                                </label>
-                                <div className="atlas-chip-row" style={{ marginTop: 14 }}>
-                                  <button type="submit" className="atlas-action atlas-action--primary atlas-action--small">Save Changes</button>
-                                  <button type="button" className="atlas-action atlas-action--ghost atlas-action--small" onClick={() => setEditIntegrationOpen(false)}>Cancel</button>
-                                </div>
-                              </form>
-                            ) : (
-                              /* Detail view */
-                              <>
-                                <div className="atlas-card__eyebrow">Configuration</div>
-                                <div className="atlas-grid atlas-grid--2" style={{ marginTop: 8 }}>
-                                  <label className="atlas-assistant__composer-field">
-                                    <span className="atlas-assistant__composer-label">Base URL</span>
-                                    <input className="atlas-assistant__composer-value" value={integrationConfigForm.baseUrl} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, baseUrl: e.target.value })} placeholder="https://" />
-                                  </label>
-                                  <label className="atlas-assistant__composer-field">
-                                    <span className="atlas-assistant__composer-label">API Key</span>
-                                    <input className="atlas-assistant__composer-value" type="password" value={integrationConfigForm.apiKey} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, apiKey: e.target.value })} placeholder="Configure if needed" />
-                                  </label>
-                                </div>
-                                <div className="atlas-chip-row" style={{ marginTop: 8 }}>
-                                  <button type="button" className="atlas-action atlas-action--primary atlas-action--small" onClick={() => void handleSaveIntegrationConfig(integration.id)}>Save Config</button>
-                                </div>
-
-                                <div className="atlas-card__eyebrow" style={{ marginTop: 14 }}>Health</div>
-                                <div className="atlas-rows" style={{ marginTop: 4 }}>
-                                  <div className="atlas-row">
-                                    <div className="atlas-row__meta">
-                                      <div className="atlas-row__title">Status</div>
-                                    </div>
-                                    <span className={`atlas-badge ${health?.status === "healthy" ? "atlas-badge--green" : health?.status === "unconfigured" ? "atlas-badge--amber" : "atlas-badge--red"}`}>
-                                      {health?.status ?? "unknown"}
-                                    </span>
-                                  </div>
-                                  <div className="atlas-row">
-                                    <div className="atlas-row__meta">
-                                      <div className="atlas-row__title">Transport</div>
-                                      <div className="atlas-row__body">{integration.transport.toUpperCase()}</div>
-                                    </div>
-                                  </div>
-                                  <div className="atlas-row">
-                                    <div className="atlas-row__meta">
-                                      <div className="atlas-row__title">Capabilities</div>
-                                    </div>
-                                    <div className="atlas-chip-row">
-                                      {integration.capabilities.map((cap) => <span key={cap.capabilityId} className="atlas-chip atlas-chip--quiet">{cap.capabilityId} (p{cap.priority})</span>)}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="atlas-chip-row" style={{ marginTop: 12 }}>
-                                  <button type="button" className="atlas-inline-action" onClick={() => startEditIntegration(integration)}>Edit</button>
-                                  <button type="button" className="atlas-inline-action" onClick={() => { selectIntegration(integration.id); }}>Close</button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {health ? (
+                            <span className={`atlas-badge ${health.status === "healthy" ? "atlas-badge--green" : health.status === "unconfigured" ? "atlas-badge--amber" : "atlas-badge--red"}`} style={{ fontSize: "0.6rem" }}>
+                              {health.status}
+                            </span>
+                          ) : null}
+                          <span className="atlas-admin-menu__row-arrow">→</span>
+                        </div>
+                      </button>
                     );
                   })
                 )}
               </div>
-            ) : null}
 
-            {/* By Capability View */}
-            {integrationsView === "capability" ? (
-              <div className="atlas-rows">
-                {integrationCapabilities.length === 0 ? (
-                  <div className="atlas-card atlas-card--soft">
-                    <div className="atlas-card__body">No capabilities registered.</div>
+              <div style={{ marginTop: 24 }}>
+                <button
+                  type="button"
+                  className="atlas-action atlas-action--primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={() => setAddIntegrationOpen(true)}
+                >
+                  + Add Connector
+                </button>
+              </div>
+            </>
+          ) : addIntegrationOpen ? (
+            /* Add form Detail View */
+            <div className="atlas-admin-detail">
+              <div className="atlas-admin-detail__topbar">
+                <button
+                  type="button"
+                  className="atlas-admin-detail__back"
+                  onClick={() => setAddIntegrationOpen(false)}
+                >
+                  ← Back
+                </button>
+                <span className="atlas-admin-detail__title">Add Connector</span>
+              </div>
+              <form className="atlas-llm-log__inspector" style={{ background: "transparent", borderTop: "none", padding: 0 }} onSubmit={handleAddIntegration}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <label className="atlas-llm-log__inspector-item">
+                    <span className="atlas-llm-log__inspector-label">ID (slug)</span>
+                    <input className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={addIntegrationForm.id} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, id: e.target.value })} placeholder="swiggy" required />
+                  </label>
+                  <label className="atlas-llm-log__inspector-item">
+                    <span className="atlas-llm-log__inspector-label">Name</span>
+                    <input className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={addIntegrationForm.name} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, name: e.target.value })} placeholder="Swiggy" required />
+                  </label>
+                  <label className="atlas-llm-log__inspector-item">
+                    <span className="atlas-llm-log__inspector-label">Transport</span>
+                    <select className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={addIntegrationForm.transport} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, transport: e.target.value })}>
+                      {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+                    </select>
+                  </label>
+                  <label className="atlas-llm-log__inspector-item">
+                    <span className="atlas-llm-log__inspector-label">Auth Methods (JSON)</span>
+                    <textarea className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)", minHeight: 80 }} value={addIntegrationForm.authMethods} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, authMethods: e.target.value })} placeholder='[{"kind":"oauth2"}]' />
+                  </label>
+                  <label className="atlas-llm-log__inspector-item">
+                    <span className="atlas-llm-log__inspector-label">Capabilities (JSON)</span>
+                    <textarea className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)", minHeight: 80 }} value={addIntegrationForm.capabilities} onChange={(e) => setAddIntegrationForm({ ...addIntegrationForm, capabilities: e.target.value })} placeholder='[{"capabilityId":"food","priority":10}]' />
+                  </label>
+                </div>
+                <div style={{ marginTop: 24 }}>
+                  <button type="submit" className="atlas-action atlas-action--primary" style={{ width: "100%", justifyContent: "center" }}>Create Connector</button>
+                </div>
+              </form>
+            </div>
+          ) : selectedIntegrationId ? (
+            /* Selected Integration Detail View */
+            (() => {
+              const integration = integrations.find((i) => i.id === selectedIntegrationId);
+              if (!integration) return null;
+              const health = integrationHealth.find((h) => h.integrationId === integration.id);
+
+              return (
+                <div className="atlas-admin-detail">
+                  <div className="atlas-admin-detail__topbar">
+                    <button
+                      type="button"
+                      className="atlas-admin-detail__back"
+                      onClick={() => { setSelectedIntegrationId(null); setEditIntegrationOpen(false); }}
+                    >
+                      ← Back
+                    </button>
+                    <span className="atlas-admin-detail__title">{integration.name}</span>
                   </div>
-                ) : (
-                  integrationCapabilities.map((cap) => {
-                    const mapped = integrations.filter((i) => i.capabilities.some((c) => c.capabilityId === cap.id));
-                    return (
-                      <div key={cap.id} className="atlas-mcp" style={{ marginBottom: 12 }}>
-                        <div className="atlas-mcp__head">
-                          <div className="atlas-mcp__mark" aria-hidden="true">{cap.name.slice(0, 1).toUpperCase()}</div>
-                          <div className="atlas-mcp__meta">
-                            <div className="atlas-mcp__name">{cap.name}</div>
-                            <div className="atlas-mcp__detail">{cap.category} · {mapped.length} integration{mapped.length !== 1 ? "s" : ""}</div>
-                          </div>
+
+                  <div className="atlas-chip-row" style={{ marginTop: 4, marginBottom: 16 }}>
+                    <button type="button" className={`atlas-action ${integration.enabled ? "atlas-action--ghost" : "atlas-action--primary"} atlas-action--small`} onClick={() => void handleToggleIntegration(integration.id, !integration.enabled)}>{integration.enabled ? "Disable" : "Enable"}</button>
+                    <button type="button" className={`atlas-action ${editIntegrationOpen ? "atlas-action--primary" : "atlas-action--ghost"} atlas-action--small`} onClick={() => editIntegrationOpen ? setEditIntegrationOpen(false) : startEditIntegration(integration)}>{editIntegrationOpen ? "Cancel Edit" : "Edit Metadata"}</button>
+                    <button type="button" className="atlas-action atlas-action--ghost atlas-action--small" style={{ color: "var(--red)", borderColor: "rgba(246, 173, 85, 0.3)" }} onClick={() => { if (window.confirm(`Delete ${integration.name}?`)) { void handleDeleteIntegration(integration.id); setSelectedIntegrationId(null); } }}>Delete</button>
+                  </div>
+
+                  {editIntegrationOpen ? (
+                    <form className="atlas-llm-log__inspector" style={{ background: "transparent", borderTop: "none", padding: 0 }} onSubmit={(e) => { e.preventDefault(); void handleUpdateIntegration(integration.id); }}>
+                      <div className="atlas-section__eyebrow" style={{ marginBottom: 16 }}>Edit Metadata</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        <label className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Name</span>
+                          <input className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={editIntegrationForm.name} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, name: e.target.value })} />
+                        </label>
+                        <label className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Transport</span>
+                          <select className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={editIntegrationForm.transport} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, transport: e.target.value })}>
+                            {TRANSPORT_KINDS.map((t) => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+                          </select>
+                        </label>
+                        <label className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Auth Methods (JSON)</span>
+                          <textarea className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)", minHeight: 80 }} value={editIntegrationForm.authMethods} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, authMethods: e.target.value })} />
+                        </label>
+                        <label className="atlas-llm-log__inspector-item">
+                          <span className="atlas-llm-log__inspector-label">Capabilities (JSON)</span>
+                          <textarea className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)", minHeight: 80 }} value={editIntegrationForm.capabilities} onChange={(e) => setEditIntegrationForm({ ...editIntegrationForm, capabilities: e.target.value })} />
+                        </label>
+                      </div>
+                      <div style={{ marginTop: 24 }}>
+                        <button type="submit" className="atlas-action atlas-action--primary" style={{ width: "100%", justifyContent: "center" }}>Save Changes</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="atlas-llm-log__inspector" style={{ borderRadius: 8, borderTop: "1px solid var(--line)" }}>
+                        <div className="atlas-section__eyebrow" style={{ marginBottom: 16 }}>Configuration</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                          <label className="atlas-llm-log__inspector-item">
+                            <span className="atlas-llm-log__inspector-label">Base URL</span>
+                            <input className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} value={integrationConfigForm.baseUrl} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, baseUrl: e.target.value })} placeholder="https://" />
+                          </label>
+                          <label className="atlas-llm-log__inspector-item">
+                            <span className="atlas-llm-log__inspector-label">API Key</span>
+                            <input className="atlas-action atlas-action--ghost" style={{ background: "var(--surface)", border: "1px solid var(--line)", padding: "10px 12px", borderRadius: 6, color: "var(--text)" }} type="password" value={integrationConfigForm.apiKey} onChange={(e) => setIntegrationConfigForm({ ...integrationConfigForm, apiKey: e.target.value })} placeholder="Configure if needed" />
+                          </label>
                         </div>
-                        <div className="atlas-rows" style={{ marginTop: 4 }}>
-                          {mapped.length === 0 ? (
-                            <div className="atlas-micro" style={{ padding: "4px 8px" }}>No integrations mapped to this capability.</div>
-                          ) : (
-                            mapped.map((integration) => {
-                              const capLink = integration.capabilities.find((c) => c.capabilityId === cap.id);
-                              return (
-                                <div className="atlas-row" key={integration.id}>
-                                  <IntegrationAvatar integrationId={integration.id} name={integration.name} size="sm" decorative />
-                                  <div className="atlas-row__meta">
-                                    <div className="atlas-row__title">{integration.name}</div>
-                                    <div className="atlas-row__body">{integration.transport.toUpperCase()} · Auth: {integration.authMethods.map((m) => m.kind).join(", ")}</div>
-                                  </div>
-                                  <span className="atlas-badge atlas-badge--blue">Priority {capLink?.priority ?? "-"}</span>
-                                </div>
-                              );
-                            })
-                          )}
+                        <div style={{ marginTop: 16 }}>
+                          <button type="button" className="atlas-action atlas-action--primary atlas-action--small" onClick={() => void handleSaveIntegrationConfig(integration.id)}>Save Config</button>
                         </div>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            ) : null}
-          </section>
+
+                      <div className="atlas-llm-log__inspector" style={{ borderRadius: 8, borderTop: "1px solid var(--line)", marginTop: 16 }}>
+                        <div className="atlas-section__eyebrow" style={{ marginBottom: 16 }}>Status & Health</div>
+                        <div className="atlas-llm-log__inspector-grid">
+                          <div className="atlas-llm-log__inspector-item">
+                            <span className="atlas-llm-log__inspector-label">Health</span>
+                            <span className={`atlas-llm-log__inspector-val`} style={{ color: health?.status === "healthy" ? "var(--green)" : health?.status === "unconfigured" ? "var(--red)" : "var(--red)" }}>
+                              {health?.status ?? "unknown"}
+                            </span>
+                          </div>
+                          <div className="atlas-llm-log__inspector-item">
+                            <span className="atlas-llm-log__inspector-label">Transport</span>
+                            <span className="atlas-llm-log__inspector-val">{integration.transport.toUpperCase()}</span>
+                          </div>
+                          <div className="atlas-llm-log__inspector-item" style={{ gridColumn: "1 / -1" }}>
+                            <span className="atlas-llm-log__inspector-label">Required scopes</span>
+                            <div className="atlas-chip-row" style={{ marginTop: 4 }}>
+                              {integration.authMethods.flatMap((m) => m.scopes ?? []).length === 0 ? (
+                                <span className="atlas-llm-log__inspector-val">None</span>
+                              ) : null}
+                              {integration.authMethods.flatMap((m) => m.scopes ?? []).map((scope) => (
+                                <span key={scope} className="atlas-badge" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>{scope}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="atlas-llm-log__inspector-item" style={{ gridColumn: "1 / -1" }}>
+                            <span className="atlas-llm-log__inspector-label">Capabilities</span>
+                            <div className="atlas-chip-row" style={{ marginTop: 4 }}>
+                              {integration.capabilities.length === 0 ? <span className="atlas-llm-log__inspector-val">None</span> : null}
+                              {integration.capabilities.map((cap) => <span key={cap.capabilityId} className="atlas-badge" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>{cap.capabilityId} (p{cap.priority})</span>)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()
+          ) : null}
         </div>
+      ) : null}
+
+      {activeTab === "connector-audit" ? (
+        <ConnectorAuditPanel integrations={integrations} />
+      ) : null}
+
+      {activeTab === "connector-recipes" ? (
+        <ConnectorRecipesPanel integrations={integrations} />
+      ) : null}
+
+      {activeTab === "skills" ? (
+        <SkillsPanel />
+      ) : null}
+
+      {activeTab === "providers" ? (
+        <ProvidersPanel />
       ) : null}
 
       {activeTab === "domains" ? (
@@ -2485,6 +2753,19 @@ export function AtlasAdmin() {
                 onChange={(event) => setVoice({ ...voice, ttsPitch: Number(event.target.value) })}
               />
             </label>
+            <label className="atlas-assistant__composer-field">
+              <span className="atlas-assistant__composer-label">Daily voice limit (minutes / user, admins &amp; dev exempt)</span>
+              <input
+                className="atlas-assistant__composer-value"
+                type="number"
+                min={0}
+                step={1}
+                value={voice.dailyVoiceLimitMinutes}
+                onChange={(event) =>
+                  setVoice({ ...voice, dailyVoiceLimitMinutes: Math.max(0, Number(event.target.value) || 0) })
+                }
+              />
+            </label>
           </div>
           <p className="atlas-micro" style={{ marginTop: 12 }}>
             Default: mic uses device speech first, then Whisper/omni. Replies use Piper/server first,
@@ -2518,7 +2799,272 @@ export function AtlasAdmin() {
       ) : null}
 
       {activeTab === "logs" ? <LlmLogsPanel /> : null}
-      </div>
+
+      {activeTab === "brief" ? <AdminDailyBriefPanel /> : null}
+          </div>
+        </div>
+
+      {/* Floating Action Button (FAB) */}
+      <button
+        type="button"
+        className="atlas-admin-fab"
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        aria-label="Open Admin Co-Pilot"
+        style={{
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          background: "radial-gradient(circle at 30% 30%, #10b981, #059669)",
+          border: "none",
+          boxShadow: "0 8px 32px rgba(16, 185, 129, 0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          zIndex: 1000,
+          transition: "transform 0.2s, box-shadow 0.2s"
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "scale(1.05)";
+          e.currentTarget.style.boxShadow = "0 8px 32px rgba(16, 185, 129, 0.6)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "scale(1)";
+          e.currentTarget.style.boxShadow = "0 8px 32px rgba(16, 185, 129, 0.4)";
+        }}
+      >
+        <span style={{ fontSize: 24, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.25))" }}>🤖</span>
+      </button>
+
+      {/* Admin Co-Pilot Bottom Sheet Chat Drawer */}
+      {isChatOpen && (
+        <div
+          className="atlas-admin-chat-sheet"
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "80vh",
+            background: "#0f172a",
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            boxShadow: "0 -12px 40px rgba(0,0,0,0.5)",
+            zIndex: 1001,
+            display: "flex",
+            flexDirection: "column",
+            borderTop: "1px solid rgba(148, 163, 184, 0.15)",
+            fontFamily: "inherit"
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid rgba(148, 163, 184, 0.1)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 20 }}>🤖</span>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontWeight: 700, color: "#f8fafc", fontSize: "0.95rem" }}>Admin Co-Pilot</span>
+                <span style={{ fontSize: "0.75rem", color: "#10b981", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} /> Active
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsChatOpen(false)}
+              style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 20, cursor: "pointer" }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "20px 16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 16
+            }}
+          >
+            {chatHistory.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#64748b", marginTop: 40, padding: 20 }}>
+                <p style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: 4 }}>Welcome, Admin!</p>
+                <p style={{ fontSize: "0.8rem" }}>Ask me to add connectors, install MCP servers, register skills, or configure AI models.</p>
+              </div>
+            ) : (
+              chatHistory.map((msg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: msg.role === "user" ? "flex-end" : "flex-start",
+                    gap: 6
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: "85%",
+                      padding: "10px 14px",
+                      borderRadius: 14,
+                      background: msg.role === "user" ? "#1e293b" : "transparent",
+                      color: msg.role === "user" ? "#f8fafc" : "#e2e8f0",
+                      fontSize: "0.88rem",
+                      lineHeight: "1.4",
+                      border: msg.role === "user" ? "none" : "1px solid rgba(148, 163, 184, 0.1)"
+                    }}
+                  >
+                    {msg.text}
+
+                    {/* Interactive Success/Error Cards */}
+                    {msg.card && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          background: "#020617",
+                          border: "1px solid rgba(16, 185, 129, 0.3)",
+                          borderRadius: 12,
+                          padding: 14,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 20, color: "#10b981" }}>✓</span>
+                          <span style={{ fontWeight: 700, color: "#10b981", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            {msg.card.type === "mcp_installed" ? "MCP Server Installation Success" :
+                             msg.card.type === "connector_added" ? "Connector Registration Success" :
+                             msg.card.type === "skill_installed" ? "Skill Registered" :
+                             msg.card.type === "provider_connected" ? "Provider Connected" : "Action Executed"}
+                          </span>
+                        </div>
+                        <div style={{ borderTop: "1px solid rgba(148, 163, 184, 0.1)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 4, fontSize: "0.78rem" }}>
+                          {msg.card.serverName && <div><strong>Server:</strong> {msg.card.serverName}</div>}
+                          {msg.card.connectorName && <div><strong>Connector:</strong> {msg.card.connectorName}</div>}
+                          {msg.card.transport && <div><strong>Transport:</strong> {msg.card.transport}</div>}
+                          {msg.card.skillName && <div><strong>Skill:</strong> {msg.card.skillName}</div>}
+                          {msg.card.provider && <div><strong>Provider:</strong> {msg.card.provider}</div>}
+                          <div><strong>Status:</strong> Active & Connected</div>
+                        </div>
+                        {msg.card.type === "mcp_installed" && (
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsChatOpen(false);
+                                setActiveTab("mcp");
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: "6px 10px",
+                                background: "#10b981",
+                                border: "none",
+                                borderRadius: 6,
+                                color: "#000",
+                                fontWeight: 600,
+                                fontSize: "0.75rem",
+                                cursor: "pointer"
+                              }}
+                            >
+                              Configure Server
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsChatOpen(false);
+                                setActiveTab("logs");
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: "6px 10px",
+                                background: "#1e293b",
+                                border: "1px solid rgba(148, 163, 184, 0.2)",
+                                borderRadius: 6,
+                                color: "#f8fafc",
+                                fontSize: "0.75rem",
+                                cursor: "pointer"
+                              }}
+                            >
+                              View Logs
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            {chatLoading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: "0.85rem" }}>
+                <span>🤖 Co-Pilot is thinking...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Composer */}
+          <div
+            style={{
+              padding: "12px 16px",
+              borderTop: "1px solid rgba(148, 163, 184, 0.1)",
+              display: "flex",
+              gap: 8,
+              background: "#020617"
+            }}
+          >
+            <input
+              type="text"
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              placeholder="Ask the Admin Co-Pilot..."
+              style={{
+                flex: 1,
+                minHeight: 44,
+                borderRadius: 12,
+                border: "1px solid rgba(148, 163, 184, 0.2)",
+                background: "#0f172a",
+                color: "#f8fafc",
+                padding: "0 12px",
+                fontSize: "0.9rem"
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void sendAdminChatMessage(chatMessage);
+              }}
+              disabled={chatLoading}
+            />
+            <button
+              type="button"
+              onClick={() => void sendAdminChatMessage(chatMessage)}
+              disabled={chatLoading || !chatMessage.trim()}
+              style={{
+                padding: "0 16px",
+                background: "#10b981",
+                border: "none",
+                borderRadius: 12,
+                color: "#000",
+                fontWeight: 700,
+                cursor: "pointer"
+              }}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

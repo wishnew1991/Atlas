@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ConnectionsSection } from "./connections-section";
@@ -18,6 +18,7 @@ type ProfileSnapshot = {
   addresses: ProfileAddress[];
   payments: ProfilePayment[];
   privacy: ProfilePrivacy;
+  voiceEnabled: boolean;
   memories: ProfileMemory[];
 };
 
@@ -28,6 +29,7 @@ const EMPTY: ProfileSnapshot = {
   addresses: [],
   payments: [],
   privacy: { saveMemory: true, useLocation: true, shareAnalytics: false },
+  voiceEnabled: true,
   memories: [],
 };
 
@@ -43,6 +45,7 @@ function initialsFor(name: string, email: string) {
 
 export function ProfileBoard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
   const [signingOut, setSigningOut] = useState(false);
   const [profile, setProfile] = useState<ProfileSnapshot>(EMPTY);
@@ -66,6 +69,68 @@ export function ProfileBoard() {
   const [memoryText, setMemoryText] = useState("");
   const [addingMemory, setAddingMemory] = useState(false);
   const [editingDetails, setEditingDetails] = useState(false);
+
+  const [briefPref, setBriefPref] = useState<{ enabled: boolean; schedule: string } | null>(null);
+  const [briefSchedule, setBriefSchedule] = useState("07:00");
+  const [briefSaving, setBriefSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/proactive/prefs", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          pref?: { enabled: boolean; schedule: string } | null;
+        };
+        if (cancelled) return;
+        if (payload.pref) {
+          setBriefPref(payload.pref);
+          setBriefSchedule(payload.pref.schedule);
+        }
+      } catch {
+        if (!cancelled) setBriefPref(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const success = searchParams?.get("connect_success");
+    if (success === "1") {
+      addToast("Service connected");
+      router.replace("/profile");
+    }
+    const error = searchParams?.get("connect_error");
+    if (error) {
+      addToast(decodeURIComponent(error), { kind: "error" });
+      router.replace("/profile");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const saveBriefPref = async (next: { enabled: boolean; schedule: string }) => {
+    if (briefSaving) return;
+    setBriefSaving(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/proactive/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const payload = (await response.json()) as { pref?: { enabled: boolean; schedule: string } };
+      if (!response.ok || !payload.pref) throw new Error("Could not update.");
+      setBriefPref(payload.pref);
+      setBriefSchedule(payload.pref.schedule);
+      addToast("Daily Brief updated");
+    } catch {
+      setError("Could not update Daily Brief.");
+    } finally {
+      setBriefSaving(false);
+    }
+  };
 
   const applyProfile = useCallback((next: ProfileSnapshot) => {
     setProfile(next);
@@ -645,6 +710,102 @@ export function ProfileBoard() {
       </section>
 
       <ConnectionsSection />
+
+      <section className="atlas-profile-block">
+        <div className="atlas-profile-block__head">
+          <div>
+            <h2 className="atlas-profile-block__title">Voice</h2>
+            <p className="atlas-profile-block__lede">
+              Live voice chat and spoken replies — attach the mic and hear Atlas talk back.
+            </p>
+          </div>
+        </div>
+        <ul className="atlas-profile-list atlas-profile-list--toggles">
+          <li className="atlas-profile-list__item">
+            <div className="atlas-profile-list__meta">
+              <span className="atlas-profile-list__title">Live voice replies</span>
+              <span className="atlas-profile-list__body">
+                {profile.voiceEnabled
+                  ? "On — speak to Atlas and listen to its replies"
+                  : "Off — Atlas won’t produce voice replies until you turn this on"}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="atlas-toggle"
+              role="switch"
+              aria-checked={profile.voiceEnabled}
+              aria-label="Live voice replies"
+              disabled={saving}
+              onClick={() => void patch({ voiceEnabled: !profile.voiceEnabled })}
+            >
+              <span className="atlas-toggle__thumb" />
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <section className="atlas-profile-block">
+        <div className="atlas-profile-block__head">
+          <div>
+            <h2 className="atlas-profile-block__title">Daily Brief</h2>
+            <p className="atlas-profile-block__lede">
+              A short morning rundown of tasks and approvals that need you.
+            </p>
+          </div>
+        </div>
+
+        <ul className="atlas-profile-list atlas-profile-list--toggles">
+          <li className="atlas-profile-list__item">
+            <div className="atlas-profile-list__meta">
+              <span className="atlas-profile-list__title">Receive Daily Brief</span>
+              <span className="atlas-profile-list__body">
+                {briefPref?.enabled
+                  ? `Delivered around ${briefPref.schedule}`
+                  : "Off — turn it on anytime"}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="atlas-toggle"
+              role="switch"
+              aria-checked={briefPref?.enabled ?? false}
+              aria-label="Receive Daily Brief"
+              disabled={briefSaving || briefPref === null}
+              onClick={() =>
+                void saveBriefPref({ enabled: !briefPref?.enabled, schedule: briefSchedule })
+              }
+            >
+              <span className="atlas-toggle__thumb" />
+            </button>
+          </li>
+          {briefPref?.enabled ? (
+            <li className="atlas-profile-list__item">
+              <div className="atlas-profile-list__meta">
+                <span className="atlas-profile-list__title">Delivery time</span>
+                <span className="atlas-profile-list__body">
+                  When your brief is due (local &ldquo;HH:MM&rdquo;).
+                </span>
+              </div>
+              <div className="atlas-profile-list__control">
+                <input
+                  type="time"
+                  value={briefSchedule}
+                  disabled={briefSaving}
+                  onChange={(e) => setBriefSchedule(e.target.value)}
+                  onBlur={() =>
+                    void saveBriefPref({ enabled: true, schedule: briefSchedule })
+                  }
+                  aria-label="Delivery time"
+                />
+              </div>
+            </li>
+          ) : null}
+        </ul>
+        {briefPref === null ? (
+          <p className="atlas-profile-empty">Loading your Daily Brief preference…</p>
+        ) : null}
+      </section>
 
       <section className="atlas-profile-block">
         <div className="atlas-profile-block__head">

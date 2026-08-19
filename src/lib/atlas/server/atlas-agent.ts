@@ -7,7 +7,7 @@ import type {
   AtlasActionResponse,
 } from "@/lib/atlas/agent-contract";
 import { prisma } from "@/lib/atlas/server/prisma";
-import { routeToolCall } from "@/lib/atlas/mcp/router";
+import { gatewayCall } from "@/lib/atlas/gateway/gateway";
 import { readFoodOrderIntent, type FoodOrderIntent } from "@/lib/atlas/mcp/food-approval";
 import type { AtlasCapabilities } from "@/lib/atlas/server/auth";
 import {
@@ -18,6 +18,8 @@ import {
 } from "@/lib/atlas/server/agent/reply";
 import { emitCommittedDomainEffect } from "@/lib/atlas/effects";
 import { runChatExecution, streamChatExecution } from "@/lib/execution/engine";
+import { recordConnectorAudit } from "@/lib/atlas/registry/audit";
+import { getSelectedProvider } from "@/lib/atlas/flows/provider-state";
 
 export { looksLikeToolPayload };
 export type { AtlasStreamChunk };
@@ -116,6 +118,15 @@ export async function executeAtlasAction(actionId: string, userId: string) {
       if (isPendingPayment) {
         foodLog("order.place", { approval: actionId, result: "pending_payment", orderId: placed.orderId });
 
+        await recordConnectorAudit({
+          integrationId: "swiggy",
+          userId,
+          action: "place_order",
+          resource: placed.orderId ?? actionId,
+          status: "pending_approval",
+          details: { result: "pending_payment", restaurant: intent.restaurantName, toPay: intent.toPay },
+        });
+
         const meta = JSON.stringify({
           orderId: placed.orderId ?? null,
           paasId: placed.paasId ?? null,
@@ -157,6 +168,15 @@ export async function executeAtlasAction(actionId: string, userId: string) {
       foodLog("order.place", { approval: actionId, result: "ok", orderId: placed.orderId });
       await resumeLinkedExecution();
 
+      await recordConnectorAudit({
+        integrationId: "swiggy",
+        userId,
+        action: "place_order",
+        resource: placed.orderId ?? actionId,
+        status: "success",
+        details: { result: "placed", restaurant: intent.restaurantName, toPay: intent.toPay, payment: intent.paymentMethod },
+      });
+
       const suggestion = await emitCommittedDomainEffect("food", intent, userId);
 
       return {
@@ -168,7 +188,7 @@ export async function executeAtlasAction(actionId: string, userId: string) {
     }
   }
 
-  const gatewayResult = await routeToolCall(domain, "execute", { domain, request: pending.summary });
+  const gatewayResult = await gatewayCall(domain as AtlasActionDomain, "execute", { domain, request: pending.summary });
 
   await prisma.approval.update({
     where: { id: actionId },
@@ -182,6 +202,15 @@ export async function executeAtlasAction(actionId: string, userId: string) {
   await resumeLinkedExecution();
 
   if (gatewayResult) {
+    await recordConnectorAudit({
+      integrationId: getSelectedProvider(domain) ?? domain,
+      userId,
+      action: "execute",
+      resource: pending.id,
+      status: "success",
+      details: { domain, message: gatewayResult.message },
+    });
+
     return {
       message: gatewayResult.message || pending.title.replace("Approve ", "") + " confirmed.",
       reference: pending.id,
@@ -249,6 +278,15 @@ export async function finalizeFoodUpi(actionId: string, userId: string): Promise
     });
     updateFoodSession(userId, { step: "placed", approvalId: undefined });
     foodLog("upi.finalize", { approval: actionId, result: "confirmed", orderId });
+
+    await recordConnectorAudit({
+      integrationId: "swiggy",
+      userId,
+      action: "confirm_payment",
+      resource: orderId,
+      status: "success",
+      details: { result: "confirmed", via: "upi" },
+    });
 
     try {
       const { findPendingExecutionForApproval, resumeExecutionAfterApproval } = await import(
@@ -394,7 +432,7 @@ async function demoResponse(
     }
   }
 
-  const result = await routeToolCall(domain, "search", { domain, request: message });
+  const result = await gatewayCall(domain as AtlasActionDomain, "search", { domain, request: message });
 
   if (result) {
     const { sanitizeAssistantText } = await import("@/lib/atlas/server/agent/tools");

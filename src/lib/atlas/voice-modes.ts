@@ -63,3 +63,9 @@ export const TTS_MODE_LABELS: Record<VoiceTtsMode, string> = {
   native_only: "Device only",
   server_only: "Server only",
 };
+
+/** Coarse mobile detection so device voices become the default on phones/tablets. */
+export function isMobileBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /(android|iphone|ipad|ipod|mobile|opera mini|iemobile)/i.test(navigator.userAgent);
+}

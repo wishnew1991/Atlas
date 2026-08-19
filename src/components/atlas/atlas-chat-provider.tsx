@@ -17,6 +17,13 @@ import type {
   AtlasConnectionRequest,
 } from "@/lib/atlas/agent-contract";
 
+export type BriefCardData = {
+  briefId: string;
+  title: string;
+  period: string;
+  items: Array<{ text: string; reason: string; kind: string }>;
+};
+
 export type ChatMessage = AtlasChatHistoryItem & {
   id: string;
   action?: AtlasPendingAction;
@@ -26,6 +33,8 @@ export type ChatMessage = AtlasChatHistoryItem & {
     observationId: string;
     message: string;
   };
+  /** Summary card for a delivered Daily Brief (src/lib/proactive). */
+  briefCard?: BriefCardData;
 };
 
 export type TimelineStep = {
@@ -73,10 +82,15 @@ type AtlasChatContextValue = {
   toggleTtsMute: () => void;
   /** True when the latest user turn came from the mic — reply may be spoken. */
   replyWithSpeech: boolean;
-  sendMessage: (message: string, options?: { fromVoice?: boolean }) => Promise<void>;
+  sendMessage: (
+    message: string,
+    options?: { fromVoice?: boolean; onToken?: (token: string) => void }
+  ) => Promise<void>;
   stopGeneration: () => void;
   startNewChat: () => void;
   appendAssistantMessage: (text: string, action?: AtlasPendingAction) => void;
+  appendBriefCard: (briefCard: BriefCardData) => void;
+  resolveBriefCard: (messageId: string) => void;
   appendRoutineSuggestion: (suggestion: {
     observationId: string;
     message: string;
@@ -257,7 +271,35 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const sendMessage = useCallback(async (message: string, options?: { fromVoice?: boolean }) => {
+  /** Attach a Daily Brief summary card to a new assistant message. */
+  const appendBriefCard = useCallback((briefCard: BriefCardData) => {
+    setChatMessages((current) => [
+      ...current,
+      {
+        id: `assistant-brief-${Date.now()}`,
+        role: "assistant",
+        text: `Here is your brief for ${briefCard.period}.`,
+        briefCard,
+      },
+    ]);
+  }, []);
+
+  /** Collapse a brief card after the user acknowledges it. */
+  const resolveBriefCard = useCallback((messageId: string) => {
+    setChatMessages((current) =>
+      current.map((msg) =>
+        msg.id === messageId && msg.briefCard
+          ? { ...msg, briefCard: undefined }
+          : msg
+      )
+    );
+  }, []);
+
+  const sendMessage = useCallback(
+    async (
+      message: string,
+      options?: { fromVoice?: boolean; onToken?: (token: string) => void }
+    ) => {
     const trimmed = message.trim();
     if (!trimmed || isSendingRef.current) return;
 
@@ -398,6 +440,11 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
             setChatMessages((current) =>
               current.map((msg) => (msg.id === assistantId ? { ...msg, text: msg.text + cleanToken } : msg))
             );
+            try {
+              options?.onToken?.(cleanToken);
+            } catch {
+              /* token listeners must never break the stream */
+            }
           } else if (event.type === "done") {
             mode = "live";
             action = event.action ?? undefined;
@@ -504,7 +551,9 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
       startNewChat,
       appendAssistantMessage,
       appendRoutineSuggestion,
+      appendBriefCard,
       resolveRoutineSuggestion,
+      resolveBriefCard,
       restoreReady: !restoring,
     }),
     [
@@ -525,7 +574,9 @@ export function AtlasChatProvider({ children }: { children: ReactNode }) {
       startNewChat,
       appendAssistantMessage,
       appendRoutineSuggestion,
+      appendBriefCard,
       resolveRoutineSuggestion,
+      resolveBriefCard,
     ]
   );
 

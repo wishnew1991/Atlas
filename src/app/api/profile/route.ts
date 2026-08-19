@@ -124,6 +124,7 @@ export async function PATCH(request: Request) {
       ...(typeof payload.name === "string" ? { name: payload.name } : {}),
       ...(typeof payload.phone === "string" ? { phone: payload.phone } : {}),
       ...(typeof payload.email === "string" ? { email: payload.email } : {}),
+      ...(typeof payload.voiceEnabled === "boolean" ? { voiceEnabled: payload.voiceEnabled } : {}),
       ...(Object.keys(privacyPatch).length > 0 ? { privacy: privacyPatch } : {}),
     });
 

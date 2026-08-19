@@ -63,3 +63,21 @@ export function extractTranscript(event: SpeechRecognitionResultEventLike): stri
   }
   return (finalText || interimText).trim();
 }
+
+/**
+ * Finals-only extraction. Returns "" when the result contains only interim
+ * (in-progress) transcript, so callers never commit a half-spoken utterance.
+ */
+export function extractFinalTranscript(event: SpeechRecognitionResultEventLike): string {
+  let finalText = "";
+  let sawFinal = false;
+  for (let i = event.resultIndex; i < event.results.length; i += 1) {
+    const result = event.results[i];
+    const piece = result?.[0]?.transcript ?? "";
+    if (result?.isFinal) {
+      finalText += piece;
+      sawFinal = true;
+    }
+  }
+  return sawFinal ? finalText.trim() : "";
+}

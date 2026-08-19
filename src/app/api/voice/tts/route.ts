@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { synthesizeSpeech, isPiperAvailable } from "@/lib/atlas/server/piper-tts";
 import { resolveConfiguredTtsTarget } from "@/lib/atlas/server/voice-routing";
+import { getAtlasActor } from "@/lib/atlas/server/auth";
+import { resolveVoiceBudget, recordVoiceUsage } from "@/lib/atlas/server/voice-caps";
 
 
 export const dynamic = "force-dynamic";
@@ -13,14 +15,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/** Rough speech seconds from text length (~150 words/min → ~15 chars/sec). */
+function estimateSpeechSeconds(text: string, rate: number): number {
+  const charsPerSecond = 15 * Math.max(0.5, Math.min(2, rate || 1));
+  return Math.max(1, Math.round(text.trim().length / charsPerSecond));
+}
+
+function recordCappedUsage(userId: string, text: string, rate: number): void {
+  void recordVoiceUsage(userId, estimateSpeechSeconds(text, rate));
+}
+
 export async function POST(request: NextRequest) {
   const payload: unknown = await request.json().catch(() => null);
 
   const text =
     isRecord(payload) && typeof payload.text === "string" ? payload.text : "";
+  const rate =
+    isRecord(payload) && typeof payload.rate === "number" ? payload.rate : 1;
 
   if (!text.trim()) {
     return NextResponse.json({ error: "text is required." }, { status: 400 });
+  }
+
+  const actor = await getAtlasActor();
+  const budget = await resolveVoiceBudget(actor);
+  if (!budget.allowed) {
+    return NextResponse.json(
+      {
+        error: `You have reached today’s voice limit (${budget.limitMinutes} minutes). Try again tomorrow or read the reply.`,
+        remainingSeconds: 0,
+      },
+      { status: 429 }
+    );
   }
 
   const target = await resolveConfiguredTtsTarget();
@@ -48,6 +74,10 @@ export async function POST(request: NextRequest) {
         voice: target.voice,
         lengthScale: 1 / Math.max(0.5, Math.min(2, target.rate || 1)),
       });
+
+      if (budget.capped) {
+        recordCappedUsage(actor.userId, text, rate);
+      }
 
       return new NextResponse(new Uint8Array(audio), {
         status: 200,

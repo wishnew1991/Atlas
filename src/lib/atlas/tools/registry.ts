@@ -1,7 +1,8 @@
 import "server-only";
 
 import type { LlmTool } from "@/lib/atlas/llm/types";
-import { routeGlobalToolCall, routeToolCall, type McpCallResult } from "@/lib/atlas/mcp/router";
+import { routeGlobalToolCall, type McpCallResult } from "@/lib/atlas/mcp/router";
+import { gatewayCall } from "@/lib/atlas/gateway/gateway";
 import { createApproval } from "@/lib/atlas/approvals/service";
 import {
   cancelOrder,
@@ -150,7 +151,7 @@ const atlasSearchTool: AtlasTool = {
       return toToolResult(result);
     }
 
-    const result = await routeToolCall(domain, "search", { domain, request, query: request });
+    const result = await gatewayCall(domain as import("@/lib/atlas/agent-contract").AtlasActionDomain, "search", { domain, request, query: request });
 
     if (!result) {
       return {

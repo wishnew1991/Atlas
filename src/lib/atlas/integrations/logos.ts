@@ -18,17 +18,20 @@ export const integrationBranding: Record<string, IntegrationBranding> = {
   zomato: {
     logo: `${PUBLIC_INTEGRATIONS}/zomato/logo.svg`,
   },
-  amazon: {
-    logo: `${PUBLIC_INTEGRATIONS}/amazon/logo.svg`,
+  zepto: {
+    logo: `${PUBLIC_INTEGRATIONS}/zepto/logo.svg`,
   },
   uber: {
     logo: `${PUBLIC_INTEGRATIONS}/uber/logo.svg`,
   },
-  ola: {
-    logo: `${PUBLIC_INTEGRATIONS}/ola/logo.svg`,
+  dhan: {
+    logo: `${PUBLIC_INTEGRATIONS}/dhan/logo.svg`,
   },
-  makemytrip: {
-    logo: `${PUBLIC_INTEGRATIONS}/makemytrip/logo.svg`,
+  upstox: {
+    logo: `${PUBLIC_INTEGRATIONS}/upstox/logo.svg`,
+  },
+  tapetide: {
+    logo: `${PUBLIC_INTEGRATIONS}/tapetide/logo.svg`,
   },
   google: {
     logo: `${PUBLIC_INTEGRATIONS}/google/logo.svg`,

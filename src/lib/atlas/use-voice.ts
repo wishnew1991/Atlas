@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  isMobileBrowser,
   parseVoiceSttMode,
   parseVoiceTtsMode,
   sttEngineOrder,
@@ -13,7 +14,7 @@ import {
 } from "@/lib/atlas/voice-modes";
 import {
   createNativeRecognition,
-  extractTranscript,
+  extractFinalTranscript,
   isNativeSttAvailable,
   isNativeTtsAvailable,
   type NativeSpeechRecognition,
@@ -27,6 +28,13 @@ type VoiceConfig = {
   ttsModelId: string;
   sttMode: VoiceSttMode;
   ttsMode: VoiceTtsMode;
+};
+
+type VoiceBudget = {
+  capped: boolean;
+  allowed: boolean;
+  remainingSeconds: number | null;
+  limitMinutes: number;
 };
 
 type VoiceStatus = {
@@ -59,6 +67,12 @@ export function useVoice() {
     ttsReady: false,
     sttModelLabel: null,
   });
+  const [budget, setBudget] = useState<VoiceBudget>({
+    capped: false,
+    allowed: true,
+    remainingSeconds: null,
+    limitMinutes: 0,
+  });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<NativeSpeechRecognition | null>(null);
@@ -72,6 +86,7 @@ export function useVoice() {
   const intentionalStopRef = useRef(false);
   const configRef = useRef(config);
   const statusRef = useRef(status);
+  const budgetRef = useRef(budget);
 
   useEffect(() => {
     configRef.current = config;
@@ -80,6 +95,10 @@ export function useVoice() {
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    budgetRef.current = budget;
+  }, [budget]);
 
   useEffect(() => {
     const hasMedia =
@@ -166,14 +185,19 @@ export function useVoice() {
       .then((payload) => {
         if (!active) return;
         if (payload?.voice) {
+          const storedSttMode = parseVoiceSttMode(payload.voice.sttMode);
+          const storedTtsMode = parseVoiceTtsMode(payload.voice.ttsMode);
+          // On phones/tablets default to the system voices (most natural and free),
+          // with server → Piper fallback. Admins can still override in Admin → Voice.
+          const onMobile = isMobileBrowser();
           setConfig({
             sttLanguage: payload.voice.sttLanguage ?? "en-US",
             ttsRate: payload.voice.ttsRate ?? 1,
             ttsPitch: payload.voice.ttsPitch ?? 1,
             sttModelId: payload.voice.sttModelId ?? "",
             ttsModelId: payload.voice.ttsModelId ?? "local:piper",
-            sttMode: parseVoiceSttMode(payload.voice.sttMode),
-            ttsMode: parseVoiceTtsMode(payload.voice.ttsMode),
+            sttMode: onMobile ? ("native_first" as const) : storedSttMode,
+            ttsMode: onMobile ? ("native_first" as const) : storedTtsMode,
           });
         }
         if (payload?.status) {
@@ -181,6 +205,17 @@ export function useVoice() {
             sttReady: payload.status.sttReady === true,
             ttsReady: payload.status.ttsReady === true,
             sttModelLabel: payload.status.sttModelLabel ?? null,
+          });
+        }
+        if (payload?.budget) {
+          setBudget({
+            capped: payload.budget.capped === true,
+            allowed: payload.budget.allowed !== false,
+            remainingSeconds:
+              typeof payload.budget.remainingSeconds === "number"
+                ? payload.budget.remainingSeconds
+                : null,
+            limitMinutes: payload.budget.limitMinutes ?? 0,
           });
         }
       })
@@ -270,9 +305,10 @@ export function useVoice() {
     setListeningEngine("native");
 
     recognition.onresult = (event) => {
-      const text = extractTranscript(event);
-      if (text) {
-        onTranscriptRef.current?.(text);
+      const finalText = extractFinalTranscript(event);
+      if (finalText) {
+        intentionalStopRef.current = false;
+        onTranscriptRef.current?.(finalText);
       }
     };
 
@@ -311,6 +347,13 @@ export function useVoice() {
     async (onTranscript: (text: string) => void) => {
       if (listening) return;
       setError(null);
+
+      if (budgetRef.current.capped && !budgetRef.current.allowed) {
+        setError(
+          `You have reached today’s voice limit (${budgetRef.current.limitMinutes} minutes). Try again tomorrow or use text input.`
+        );
+        return;
+      }
 
       const order = sttEngineOrder(configRef.current.sttMode);
       const errors: string[] = [];
@@ -418,6 +461,13 @@ export function useVoice() {
       if (!text) return;
       setError(null);
 
+      if (budgetRef.current.capped && !budgetRef.current.allowed) {
+        setError(
+          `You have reached today’s voice limit (${budgetRef.current.limitMinutes} minutes). Try again tomorrow or read the reply.`
+        );
+        return;
+      }
+
       const order = ttsEngineOrder(configRef.current.ttsMode);
       const errors: string[] = [];
 
@@ -427,8 +477,10 @@ export function useVoice() {
             speakNative(text);
             return;
           }
-          await speakServer(text);
-          return;
+          if (statusRef.current.ttsReady) {
+            await speakServer(text);
+            return;
+          }
         } catch (err) {
           errors.push(err instanceof Error ? err.message : "TTS failed");
         }
@@ -457,6 +509,7 @@ export function useVoice() {
     listeningEngine,
     speaking,
     error,
+    budget,
     clearError: () => setError(null),
     startListening,
     stopListening,

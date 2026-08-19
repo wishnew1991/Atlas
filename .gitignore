@@ -72,3 +72,6 @@ scripts/check-regressions.mjs
 # Root-level design notes
 foundermode-command.html
 foundermode-mobile.html
+
+# Google OAuth client credentials (never commit)
+client_secret_*.json

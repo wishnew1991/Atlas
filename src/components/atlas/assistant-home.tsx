@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type { AtlasPendingAction } from "@/lib/atlas/agent-contract";
+import type { BriefCardData } from "./atlas-chat-provider";
 import { useVoice } from "@/lib/atlas/use-voice";
+import { useVoiceSession } from "@/lib/atlas/use-voice-session";
 import { HOME_ACTIONS, useAtlasChat } from "./atlas-chat-provider";
 import {
   MicIcon,
@@ -16,6 +18,22 @@ import {
   VolumeMuteIcon,
 } from "./icons";
 import { MarkdownText } from "./markdown-text";
+import { DailyBriefCard } from "./daily-brief-card";
+
+function labelForKind(kind: string): string {
+  switch (kind) {
+    case "approval":
+      return "Approval";
+    case "deadline":
+      return "Deadline";
+    case "followup":
+      return "Follow-up";
+    case "info":
+      return "Heads-up";
+    default:
+      return "Task";
+  }
+}
 
 export function AssistantHome({
   mode = "home",
@@ -27,9 +45,9 @@ export function AssistantHome({
   const router = useRouter();
   const chat = useAtlasChat();
   const voice = useVoice();
+  const voiceSession = useVoiceSession();
   const threadRef = useRef<HTMLDivElement>(null);
   const spokenIdRef = useRef<string | null>(null);
-  const voiceSendLockRef = useRef(false);
   const [executingActionId, setExecutingActionId] = useState<string | null>(null);
   const [pendingUpi, setPendingUpi] = useState<{
     actionId: string;
@@ -74,6 +92,47 @@ export function AssistantHome({
     }
   }, [pendingUpi]);
 
+  // Fresh conversations get today's Daily Brief as a summary card — but only
+  // once per session and only when there is no unread brief already shown.
+  const briefInjectedRef = useRef(false);
+  useEffect(() => {
+    if (mode !== "chat" || chat.restoring || chat.isSending) return;
+    if (briefInjectedRef.current) return;
+    if (chat.hasUserMessages) return;
+    if (chat.chatMessages.some((m) => m.briefCard)) return;
+
+    briefInjectedRef.current = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/proactive/briefs?limit=6", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          briefs?: Array<{
+            id: string;
+            period: string;
+            title: string;
+            acknowledgedAt: string | null;
+            items: Array<{ text: string; item: { reason: string; kind: string } }>;
+          }>;
+        };
+        const latest = (payload.briefs ?? []).find((b) => !b.acknowledgedAt);
+        if (!latest || latest.items.length === 0) return;
+        chat.appendBriefCard({
+          briefId: latest.id,
+          period: latest.period,
+          title: latest.title,
+          items: latest.items.map((entry) => ({
+            text: entry.text,
+            reason: entry.item.reason,
+            kind: entry.item.kind,
+          })),
+        } as BriefCardData);
+      } catch {
+        /* brief card is a nice-to-have; ignore failures */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, chat.restoring, chat.isSending]);
+
   useEffect(() => {
     const thread = threadRef.current;
     if (thread) {
@@ -83,7 +142,9 @@ export function AssistantHome({
 
   useEffect(() => {
     // Match modality: typed turns stay text-only; mic turns may speak the reply.
+    // A live voice session speaks its own reply tokens, so never double-trigger.
     if (mode !== "chat" || chat.isSending || chat.ttsMuted || !chat.replyWithSpeech) return;
+    if (voiceSession.sessionActive) return;
 
     const last = chat.chatMessages[chat.chatMessages.length - 1];
     if (
@@ -134,34 +195,34 @@ export function AssistantHome({
     }
   };
 
-  const toggleVoice = () => {
-    if (voice.listening) {
-      voiceSendLockRef.current = false;
-      voice.stopListening();
+  const toggleVoiceSession = () => {
+    if (voiceSession.sessionActive) {
+      voiceSession.clearSessionError?.();
+      voiceSession.stopSession();
       return;
     }
+    if (chat.isSending) return;
 
-    if (voice.speaking) {
-      voice.stopSpeaking();
+    voice.stopListening();
+    voice.stopSpeaking();
+    voiceSession.clearSessionError?.();
+    // Route through Chat so home becomes the launcher, exactly like text turns.
+    if (mode === "home") {
+      router.push("/chat");
     }
-
-    voiceSendLockRef.current = false;
-    voice.clearError?.();
-    voice.startListening((text) => {
-      chat.setChatDraft(text);
-      const clean = text.trim();
-      if (!clean || voiceSendLockRef.current || chat.isSending) return;
-
-      // Commit one utterance, then close the mic so TTS cannot feed back into STT.
-      if (clean.endsWith(".") || clean.endsWith("?") || clean.length > 40) {
-        voiceSendLockRef.current = true;
-        voice.stopListening();
-        void sendAndMaybeRoute(clean, true).finally(() => {
-          voiceSendLockRef.current = false;
-        });
-      }
+    void voiceSession.startSession(async (text, options) => {
+      await chat.sendMessage(text, options);
     });
   };
+
+  const stageLabel =
+    voiceSession.sessionStage === "speaking"
+      ? "Speaking…"
+      : voiceSession.sessionStage === "thinking"
+        ? "Thinking…"
+        : voiceSession.sessionStage === "listening"
+          ? "Listening…"
+          : "Voice idle";
 
   const approveAction = async (action: AtlasPendingAction) => {
     if (executingActionId) return;
@@ -290,6 +351,19 @@ export function AssistantHome({
     }
   };
 
+  const acknowledgeBriefCard = async (messageId: string, briefId: string) => {
+    try {
+      const response = await fetch(`/api/proactive/briefs/${briefId}/ack`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("ack failed");
+      chat.resolveBriefCard(messageId);
+      chat.appendAssistantMessage("Got it — that brief is marked as done.");
+    } catch {
+      chat.appendAssistantMessage("I couldn't mark that brief as read — try again.");
+    }
+  };
+
   // Poll Swiggy while the UPI card is open so cancel/fail/success updates the UI.
   useEffect(() => {
     if (mode !== "chat" || !pendingUpi) return;
@@ -332,31 +406,45 @@ export function AssistantHome({
         onChange={(event) => chat.setChatDraft(event.target.value)}
         onKeyDown={handleChatKeyDown}
         placeholder={
-          voice.listening
-            ? voice.listeningEngine === "server"
-              ? "Listening (cloud)…"
-              : "Listening (device)…"
-            : mode === "home"
-              ? "Ask Atlas to get something done"
-              : "Message Atlas"
+          mode === "home"
+            ? "Ask Atlas to get something done"
+            : "Message Atlas"
         }
         rows={1}
-        disabled={chat.isSending || voice.listening}
+        disabled={chat.isSending}
         aria-label="Ask Atlas"
       />
       <div className="atlas-mobile-composer__actions">
-        {voice.supported ? (
+        {voiceSession.sessionActive ? (
           <button
             type="button"
-            onClick={toggleVoice}
-            aria-label={voice.listening ? "Stop voice input" : "Start voice input"}
-            aria-pressed={voice.listening}
-            className={voice.listening ? "atlas-mic atlas-mic--active" : "atlas-mic"}
-            disabled={chat.isSending}
+            onClick={toggleVoiceSession}
+            aria-label="End live voice conversation"
+            aria-pressed={true}
+            className="atlas-live-voice atlas-live-voice--active"
+            title={stageLabel}
           >
-            <MicIcon width={18} height={18} />
+            <StopIcon width={16} height={16} />
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={toggleVoiceSession}
+            aria-label="Start a live voice conversation (hands-free)"
+            aria-pressed={false}
+            className="atlas-live-voice"
+            disabled={chat.isSending || !voiceSession.sttCapable}
+            title={
+              !voiceSession.voiceEnabled
+                ? "Voice replies are off — enable them in Profile → Voice."
+                : voiceSession.sttCapable
+                  ? ""
+                  : "Voice is not supported on this device/browser yet (no speech recognition)."
+            }
+          >
+            <MicIcon width={16} height={16} />
+          </button>
+        )}
         {chat.isSending ? (
           <button
             type="button"
@@ -431,6 +519,7 @@ export function AssistantHome({
         ) : null}
 
         <div className="atlas-chat-app__home-body">
+          <DailyBriefCard />
           <p className="atlas-chat-app__home-eyebrow">What do you want to do?</p>
           <div className="atlas-home-actions" aria-label="Quick actions">
             {HOME_ACTIONS.map((action) => (
@@ -609,6 +698,36 @@ export function AssistantHome({
                   </div>
                 </div>
               ) : null}
+              {message.briefCard ? (
+                <div className="atlas-brief-chat-card">
+                  <div className="atlas-brief-chat-card__eyebrow">
+                    Daily Brief · {message.briefCard.period}
+                  </div>
+                  <div className="atlas-brief-chat-card__title">{message.briefCard.title}</div>
+                  <ul className="atlas-brief-chat-card__items">
+                    {message.briefCard.items.map((entry, index) => (
+                      <li className="atlas-brief-chat-card__item" key={`${entry.text}-${index}`}>
+                        <span className="atlas-brief-card__badge">
+                          {labelForKind(entry.kind)}
+                        </span>
+                        <div className="atlas-brief-card__copy">
+                          <span className="atlas-brief-chat-card__item-title">{entry.text}</span>
+                          <span className="atlas-brief-card__item-reason">{entry.reason}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="atlas-brief-chat-card__actions">
+                    <button
+                      type="button"
+                      className="atlas-action atlas-action--primary"
+                      onClick={() => void acknowledgeBriefCard(message.id, message.briefCard!.briefId)}
+                    >
+                      Got it
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
@@ -713,9 +832,26 @@ export function AssistantHome({
         </div>
       ) : null}
 
+      {voiceSession.sessionActive ? (
+        <div className="atlas-live-session-bar" role="status">
+          <span className="atlas-live-session-bar__dot" />
+          <span className="atlas-live-session-bar__label">{stageLabel}</span>
+          {voiceSession.liveCaption ? (
+            <span className="atlas-live-session-bar__caption">
+              {voiceSession.liveCaption}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {composer}
 
-      {voice.speaking && !chat.ttsMuted ? (
+      {voiceSession.sessionActive ? (
+        <p className="atlas-chat-app__notice">
+          Hands-free mode — keep talking. Atlas listens continuously and you can interrupt
+          replies. Speak clearly or tap stop to end the conversation.
+        </p>
+      ) : voice.speaking && !chat.ttsMuted ? (
         <button
           type="button"
           className="atlas-chat-app__notice atlas-inline-action"
@@ -732,6 +868,12 @@ export function AssistantHome({
       {voice.error ? (
         <p className="atlas-chat-app__voice-error" role="alert">
           {voice.error}
+        </p>
+      ) : null}
+
+      {voiceSession.sessionError ? (
+        <p className="atlas-chat-app__voice-error" role="alert">
+          {voiceSession.sessionError}
         </p>
       ) : null}
     </div>

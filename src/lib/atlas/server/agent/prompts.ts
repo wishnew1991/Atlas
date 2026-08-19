@@ -1,5 +1,9 @@
 import "server-only";
 
+import { isPiperAvailable } from "@/lib/atlas/server/piper-tts";
+import { resolveConfiguredTtsTarget } from "@/lib/atlas/server/voice-routing";
+import { getAtlasActor } from "@/lib/atlas/server/auth";
+
 export const BASE_SYSTEM_PROMPT = `You are Atlas, an executive personal AI assistant. Your goal is to help the user accomplish things with as little effort as possible. They do not want to manage or prompt-engineer AI; they want you to quietly handle work and bring them clear, ready decisions.
 
 ## Executive Assistant Style
@@ -12,6 +16,9 @@ export const BASE_SYSTEM_PROMPT = `You are Atlas, an executive personal AI assis
 ## Connected services
 - Tools prefixed with \`mcp__\` come from connected MCP services (web search, browsing, files, memory, food, travel, etc.). Use them when they clearly help with the user's request — a tool whose description matches the task. If a service is not exposed here, it is not connected; say so instead of inventing results.
 - Never invent data the tools did not return. If a connected tool fails or is unavailable, tell the user plainly.
+
+## Voice
+- Atlas is a voice-capable assistant: the user can speak to you, and your replies can be read aloud as speech. Never tell the user you are text-only or that you cannot use voice/speech — voice is a real feature, and how to turn it on is covered in the turn-specific guidance below.
 
 ## Memory & Context (Intent-aware pipeline)
 - Intent classification is the single gate: conversational · recommendation · execution · hybrid · ambiguous.
@@ -95,6 +102,7 @@ export function buildSystemPrompt(
     memoryMode?: PromptMemoryMode;
     recommendationBriefing?: string;
     flowGuide?: string;
+    voiceContext?: string;
   }
 ): string {
   let prompt = BASE_SYSTEM_PROMPT;
@@ -150,7 +158,70 @@ ${sessionContext}`;
     prompt += `\n\n---\n\n${options.flowGuide}`;
   }
 
+  if (options?.voiceContext) {
+    prompt += `\n\n${options.voiceContext}`;
+  }
+
   return prompt;
+}
+
+export function buildVoiceContext(input: {
+  voiceEnabled: boolean;
+  ttsAvailable: boolean;
+  nativeTts: boolean;
+  fromVoice?: boolean;
+}): string {
+  const { voiceEnabled, ttsAvailable, nativeTts, fromVoice } = input;
+
+  if (voiceEnabled && ttsAvailable) {
+    return `## Voice & replies
+- You are a voice-capable assistant: the user can speak to you and your replies are read aloud as speech.
+- Reply in short, clear, natural sentences that are easy to speak aloud — not long blocks or tables.
+- Never claim you are text-only or voice-incapable — voice is available to you when enabled.
+${fromVoice ? `- The user just spoke to you and expects a spoken reply — keep it conversational and compact.` : ""}`;
+  }
+
+  // Voice is disabled, or no TTS engine is configured server-side.
+  const why =
+    voiceEnabled === false
+      ? "the user has turned voice off under Profile → Voice"
+      : nativeTts
+        ? "voice is enabled in Profile, but this device's built-in voice is preferred and may not read replies aloud"
+        : "no TTS model or Piper voice is configured yet (see Admin → Voice)";
+
+  const direct = `If the user asks about voice, or why they cannot hear spoken replies, tell them: live voice replies are controlled under **Profile → Voice** — turn on **Live voice replies** to hear Atlas talk back.`;
+
+  return `## Voice & replies
+- You ARE a voice-capable assistant — voice is a real Atlas feature, not an absence of it.
+- Never claim you are text-only or that you don't support voice. That is false and confuses the user.
+- Right now spoken replies are unavailable (${why}).
+- ${direct}
+${fromVoice ? `- The user just spoke to you and expects a spoken reply. ${direct}` : ""}`;
+}
+
+export async function resolveVoiceContextForUser(
+  userId: string,
+  options?: { fromVoice?: boolean }
+): Promise<string> {
+  const { getProfileSnapshot } = await import("@/lib/atlas/profile/service");
+  const [profile, ttsTarget, piperAvailable, actor] = await Promise.all([
+    getProfileSnapshot(userId),
+    resolveConfiguredTtsTarget(),
+    isPiperAvailable(),
+    getAtlasActor(),
+  ]);
+
+  const voiceEnabled = profile.voiceEnabled;
+  const ttsAvailable = Boolean(ttsTarget) && (ttsTarget?.kind === "model" || piperAvailable);
+
+  return buildVoiceContext({
+    voiceEnabled,
+    ttsAvailable,
+    // Server can't see the device; native TTS only matters when the server
+    // engine is down but the app still has a browser fallback.
+    nativeTts: false,
+    fromVoice: options?.fromVoice,
+  });
 }
 
 export function buildFoodSessionContextFromSession(session: {

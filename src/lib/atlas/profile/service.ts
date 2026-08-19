@@ -33,6 +33,8 @@ export type ProfileSnapshot = {
   addresses: ProfileAddress[];
   payments: ProfilePayment[];
   privacy: ProfilePrivacy;
+  /// Profile → Voice: allow live voice replies.
+  voiceEnabled: boolean;
   memories: Array<{
     id: string;
     type: string;
@@ -134,6 +136,7 @@ export async function getProfileSnapshot(userId: string): Promise<ProfileSnapsho
     addresses: parseJsonArray<ProfileAddress>(row.addressesJson),
     payments: parseJsonArray<ProfilePayment>(row.paymentsJson),
     privacy: parsePrivacy(row.privacyJson),
+    voiceEnabled: row.voiceEnabled,
     memories: memories.map((m) => ({
       id: m.id,
       type: m.type,
@@ -150,6 +153,7 @@ export type ProfilePatch = {
   addresses?: ProfileAddress[];
   payments?: ProfilePayment[];
   privacy?: Partial<ProfilePrivacy>;
+  voiceEnabled?: boolean;
 };
 
 export async function updateProfile(userId: string, patch: ProfilePatch): Promise<ProfileSnapshot> {
@@ -165,6 +169,7 @@ export async function updateProfile(userId: string, patch: ProfilePatch): Promis
       ...(patch.addresses !== undefined ? { addressesJson: JSON.stringify(patch.addresses) } : {}),
       ...(patch.payments !== undefined ? { paymentsJson: JSON.stringify(patch.payments) } : {}),
       ...(patch.privacy !== undefined ? { privacyJson: JSON.stringify(privacy) } : {}),
+      ...(patch.voiceEnabled !== undefined ? { voiceEnabled: patch.voiceEnabled } : {}),
     },
   });
 

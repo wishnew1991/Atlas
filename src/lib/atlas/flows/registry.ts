@@ -36,13 +36,11 @@ export interface Provider {
 const PROVIDER_OVERRIDES: Map<string, Partial<Provider>> = new Map([
   ["swiggy", { name: "Swiggy", priority: 1 }],
   ["zomato", { name: "Zomato", priority: 2 }],
+  ["zepto", { name: "Zepto", priority: 3 }],
   ["uber_eats", { name: "Uber Eats", priority: 3 }],
-  ["makemytrip", { name: "MakeMyTrip", priority: 1 }],
   ["cleartrip", { name: "Cleartrip", priority: 2 }],
   ["booking_com", { name: "Booking.com", priority: 3 }],
   ["uber", { name: "Uber", priority: 1 }],
-  ["ola", { name: "Ola", priority: 2 }],
-  ["amazon", { name: "Amazon", priority: 1 }],
   ["walmart", { name: "Walmart", priority: 2 }],
 ]);
 

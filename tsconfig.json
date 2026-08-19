@@ -34,6 +34,7 @@
     "scripts/add-google-key.ts",
     "scripts/autonomous-audit.ts",
     "scripts/create-admin.ts",
-    "scripts/retrace-audit.ts"
+    "scripts/retrace-audit.ts",
+    "workers"
   ]
 }

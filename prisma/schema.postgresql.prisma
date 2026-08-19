@@ -82,6 +82,8 @@ model UserProfile {
   paymentsJson  String   @default("[]")
   /// JSON privacy toggles.
   privacyJson   String   @default("{}")
+  /// Per-user live voice replies preference (Profile → Voice).
+  voiceEnabled  Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -138,6 +140,23 @@ model VoiceConfig {
   sttMode     String   @default("native_first")
   /// server_first | native_first | native_only | server_only
   ttsMode     String   @default("server_first")
+  /// Daily voice (STT/TTS) usage cap in minutes per non-admin/non-dev user. 0 = no cap.
+  dailyVoiceLimitMinutes Int @default(15)
+}
+
+/// Per-user daily voice usage for enforcing the non-admin voice cap.
+model VoiceUsage {
+  id        String   @id @default(cuid())
+  /// better-auth user id or guest id, matched to the voice actor.
+  userId    String
+  /// Local calendar day (YYYY-MM-DD) the usage belongs to.
+  day       String
+  /// Accumulated seconds of voice activity on that day.
+  seconds   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, day])
+  @@index([userId])
 }
 
 model Approval {
@@ -153,6 +172,7 @@ model Approval {
   /// Arbitrary JSON for domain-specific execution state, e.g. Swiggy UPI
   /// handoff (orderId, paasId, cartId, lat, lng, upiLink, upiQr, paymentRef).
   meta        String?
+  risk        String    @default("standard")
   expiresAt   DateTime
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -458,6 +478,7 @@ model Capability {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   integrations    IntegrationCapability[]
+  skills          Skill[]
 }
 
 // ── Integration Registry ──
@@ -466,6 +487,7 @@ model Integration {
   id              String   @id                          // "swiggy", "zomato", "amazon"
   name            String                                // "Swiggy", "Zomato", "Amazon"
   transport       String   @default("mcp")              // "mcp" | "rest" | "sdk" | "graphql"
+  transportOrderJson String @default("[]")
   authMethodsJson String   @default("[]")               // JSON: AuthMethod[]
   icon            String?
   description     String?
@@ -475,6 +497,10 @@ model Integration {
   capacities      IntegrationCapability[]
   configs         IntegrationConfig[]
   connections     UserConnection[]
+  sessions        ConnectorSession[]
+  jobs            ConnectorJob[]
+  audits          ConnectorAudit[]
+  skills          Skill[]
 }
 
 model IntegrationCapability {
@@ -506,6 +532,39 @@ model IntegrationConfig {
   @@index([integrationId])
 }
 
+/// A delivered proactive brief (daily digest etc.) — idempotent per user/trigger/period.
+model ProactiveBrief {
+  id            String   @id @default(cuid())
+  userId        String
+  triggerType   String
+  period        String
+  status        String   @default("delivered")
+  title         String
+  itemsJson     String   @default("[]")
+  synthetic     Boolean  @default(false)
+  deliveredAt   DateTime @default(now())
+  acknowledgedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, triggerType, period])
+  @@index([userId, deliveredAt])
+}
+
+/// Per-user proactive engine trigger preferences (schedule, enabled).
+model ProactiveTrigger {
+  id          String   @id @default(cuid())
+  userId      String
+  triggerType String
+  schedule    String   @default("07:00")
+  enabled     Boolean  @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, triggerType])
+}
+
 model UserConnection {
   id              String      @id @default(cuid())
   userId          String
@@ -524,3 +583,100 @@ model UserConnection {
   @@unique([userId, integrationId])
   @@index([userId, status])
 }
+
+model ConnectorSession {
+  id            String      @id @default(cuid())
+  userId        String
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  stateJson     String      @default("{}")
+  expiresAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([userId, integrationId])
+}
+
+model ConnectorJob {
+  id            String      @id @default(cuid())
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  status        String      @default("pending")
+  payloadJson   String      @default("{}")
+  resultJson    String?
+  error         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  completedAt   DateTime?
+
+  @@index([integrationId, status])
+}
+
+model ConnectorAudit {
+  id            String      @id @default(cuid())
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  userId        String?
+  action        String
+  resource      String?
+  status        String      @default("success")
+  detailsJson   String      @default("{}")
+  createdAt     DateTime    @default(now())
+
+  @@index([integrationId, createdAt])
+}
+
+// ── Unified Capability Registry (Skills, Business Providers) ──
+
+/// A business provider powers connectors and LLM integrations: it is the
+/// technical service/endpoint behind a connector (e.g. "Swiggy MCP", "Google
+/// Cloud SDK") or a model source. Implementation method is the kind.
+model Provider {
+  id                  String    @id @default(cuid())
+  name                String
+  /// "mcp" | "api" | "sdk" | "browser" — implementation method.
+  kind                String    @default("mcp")
+  baseUrl             String?
+  authType            String    @default("api_key") // "api_key" | "oauth2" | "none"
+  /// Optional Credential link for an API key that powers this provider.
+  credentialId        String?
+  endpointCatalogJson String    @default("[]") // discovered endpoints, JSON array
+  endpointsDiscoveredAt DateTime?
+  source              String    @default("manual") // "catalog" | "discovered" | "manual"
+  status              String    @default("active") // "draft" | "active" | "deprecated"
+  enabled             Boolean   @default(true)
+  lastTestedAt        DateTime?
+  lastTestOk          Boolean?
+  metadataJson        String    @default("{}")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  skills              Skill[]
+}
+
+/// A skill is a capability Atlas can perform. Skills are offered by
+/// connectors and powered by providers; the implementation method
+/// (mcp/api/sdk/browser) is recorded on the provider.
+model Skill {
+  id               String       @id @default(cuid())
+  name             String
+  category         String       @default("action") // "action" | "communication" | "knowledge" | any
+  description      String?
+  capabilityId     String
+  capability       Capability   @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  connectorId      String?
+  connector        Integration? @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+  providerId       String?
+  provider         Provider?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  requiresApproval Boolean      @default(true)
+  enabled          Boolean      @default(true)
+  version          String       @default("1.0.0")
+  status           String       @default("draft") // "draft" | "active" | "deprecated"
+  /// JSON: recipe / playbook scaffold for the skill (e.g. browser recipe).
+  recipeJson       String       @default("{}")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([capabilityId])
+  @@index([connectorId])
+}
+

@@ -24,7 +24,7 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS
     ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((o) => o.trim())
-    : ["http://localhost:3000"],
+    : ["http://localhost:3000", "http://localhost:3001"],
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
@@ -34,7 +34,16 @@ export const auth = betterAuth({
         serverPassword.verify(data.hash, data.password),
     },
   },
-  socialProviders: {},
+  socialProviders: {
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: process.env.GOOGLE_CLIENT_ID as string,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+          },
+        }
+      : {}),
+  },
   session: {
     cookieCache: {
       enabled: true,

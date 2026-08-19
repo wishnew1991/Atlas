@@ -145,6 +145,28 @@
 
 ---
 
+## Milestone 3: Unified Capability Registry (Control Plane)
+**Status:** 🚧 In progress
+
+### Phase 0 — Registry Backend (✅ Complete)
+- 3 new Prisma models: `Skill`, `Provider`, `ConnectorAudit` (both `schema.prisma` + `schema.postgresql.prisma`)
+- Migration applied to `dev.db`; client regenerated
+- `src/lib/atlas/registry/index.ts` — typed CRUD: providers (list/get/create/update/delete/test), skills, `listEnabledSkills()`
+- `src/lib/atlas/registry/audit.ts` — `recordConnectorAudit()` best-effort audit writer
+- Admin API routes (401-guarded via `requireAtlasAdmin`):
+  - `/api/admin/skills` + `/api/admin/skills/[id]`
+  - `/api/admin/providers` + `/api/admin/providers/[id]`
+  - `/api/admin/connectors/audit` — real DB feed (was 404; panel previously fell back to sample rows)
+- `scripts/seed-registry.ts` — now also seeds 9 providers + 8 skills (idempotent upserts; integration cleanup unchanged)
+
+### Phase 3 — Admin UI Wiring (✅ Complete)
+- `src/components/atlas/skills-panel.tsx` — list/create/toggle/detail/delete, live/status badges, category counts
+- `src/components/atlas/providers-panel.tsx` — list/create/toggle/test/detail/delete, endpoint/credential inspector, last-test badge
+- New "Registry" group in the Control Plane nav (`atlas-admin.tsx`) with Skills + Providers tabs
+- Audit feed is now live: `atlas-agent.ts` records real `ConnectorAudit` rows at every completion point
+  (order place → pending payment / success, gateway `execute`, UPI `confirm_payment`)
+- Verified: tsc clean for all touched files; audit route query returns `integrationName` via join (probe row round-trip tested)
+
 ## Final Test Summary
 
 | Suite | Tests | Status |

@@ -11,7 +11,7 @@ import { chat, streamChat, type LlmChatOptions } from "@/lib/atlas/llm";
 import { getToolsForCapabilities, executeTool } from "@/lib/atlas/tools/registry";
 import { estimateMessagesTokens, historyToLlmMessages } from "@/lib/atlas/conversation/history";
 import { beginStage, endStage } from "@/lib/atlas/observability/trace";
-import { buildFoodSessionContextFromSession, buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
+import { buildFoodSessionContextFromSession, buildSystemPrompt, resolveVoiceContextForUser } from "@/lib/atlas/server/agent/prompts";
 import {
   extractAndStoreMemories,
   classifyMemoryIntent,
@@ -393,6 +393,7 @@ export async function handleExecutionStepJob(data: ExecutionStepJobData): Promis
         const systemPrompt = buildSystemPrompt(ctx.memories, sessionCtx, {
           memoryMode: ctx.memoryMode,
           recommendationBriefing: ctx.recommendation?.briefing,
+          voiceContext: await resolveVoiceContextForUser(ctx.userId),
         });
         const llmMessages = historyToLlmMessages(
           systemPrompt,

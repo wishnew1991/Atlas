@@ -4,7 +4,7 @@ import { parseVoiceSttMode, parseVoiceTtsMode, type VoiceSttMode, type VoiceTtsM
 import { decryptSecret, encryptSecret } from "@/lib/security/secrets";
 import { prisma } from "./prisma";
 
-export type AtlasProvider = "openai" | "anthropic" | "google" | "nvidia" | "custom";
+export type AtlasProvider = "openai" | "anthropic" | "google" | "nvidia" | "custom" | "openrouter";
 
 export interface AtlasModelConfig {
   id: string;
@@ -45,6 +45,8 @@ export interface AtlasVoiceConfig {
   sttMode: VoiceSttMode;
   /** Device vs server TTS preference (Capacitor-ready). */
   ttsMode: VoiceTtsMode;
+  /** Daily voice usage cap in minutes for non-admin/non-dev users (0 = unlimited). */
+  dailyVoiceLimitMinutes: number;
 }
 
 export interface AtlasModelRegistry {
@@ -56,19 +58,19 @@ export interface AtlasModelRegistry {
   domains: string[];
 }
 
-const builtInDomains = ["shopping", "travel", "food", "rides", "appointments"];
+const builtInDomains = ["shopping", "travel", "food", "rides", "appointments", "admin"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
 async function ensureSeed() {
-  const domainCount = await prisma.domain.count();
-
-  if (domainCount === 0) {
-    await prisma.domain.createMany({
-      data: builtInDomains.map((slug) => ({ slug, builtIn: true })),
-    });
+  for (const slug of builtInDomains) {
+    await prisma.domain.upsert({
+      where: { slug },
+      update: {},
+      create: { slug, builtIn: true },
+    }).catch(() => {});
   }
 
   const voice = await prisma.voiceConfig.findUnique({ where: { id: 1 } });
@@ -113,6 +115,7 @@ export async function readRegistry(): Promise<AtlasModelRegistry> {
       ttsModelId: voice?.ttsModelId ?? "local:piper",
       sttMode: parseVoiceSttMode(voice?.sttMode),
       ttsMode: parseVoiceTtsMode(voice?.ttsMode),
+      dailyVoiceLimitMinutes: voice?.dailyVoiceLimitMinutes ?? 15,
     },
     domains: domains.map((domain) => domain.slug),
   };

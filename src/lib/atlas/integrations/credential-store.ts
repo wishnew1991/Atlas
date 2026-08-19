@@ -6,6 +6,7 @@
  */
 
 import { prisma } from "@/lib/atlas/server/prisma";
+import { encryptSecret, decryptSecret } from "@/lib/security/secrets";
 
 export interface StoredCredential {
   apiKey?: string | null;
@@ -19,9 +20,9 @@ export const credentialStore = {
     await prisma.integrationConfig.update({
       where: { id: configId },
       data: {
-        apiKey: credential.apiKey ?? null,
-        oauthToken: credential.oauthToken ?? null,
-        oauthRefresh: credential.oauthRefresh ?? null,
+        apiKey: credential.apiKey ? encryptSecret(credential.apiKey, "apiKey") : null,
+        oauthToken: credential.oauthToken ? encryptSecret(credential.oauthToken, "oauthToken") : null,
+        oauthRefresh: credential.oauthRefresh ? encryptSecret(credential.oauthRefresh, "oauthRefresh") : null,
       },
     });
   },
@@ -30,9 +31,9 @@ export const credentialStore = {
     await prisma.userConnection.update({
       where: { id: connectionId },
       data: {
-        apiKey: credential.apiKey ?? null,
-        oauthToken: credential.oauthToken ?? null,
-        oauthRefresh: credential.oauthRefresh ?? null,
+        apiKey: credential.apiKey ? encryptSecret(credential.apiKey, "apiKey") : null,
+        oauthToken: credential.oauthToken ? encryptSecret(credential.oauthToken, "oauthToken") : null,
+        oauthRefresh: credential.oauthRefresh ? encryptSecret(credential.oauthRefresh, "oauthRefresh") : null,
         tokenExpiresAt: credential.tokenExpiresAt ?? null,
       },
     });
@@ -41,7 +42,7 @@ export const credentialStore = {
   async rotateConfigCredential(configId: string, newApiKey: string): Promise<void> {
     await prisma.integrationConfig.update({
       where: { id: configId },
-      data: { apiKey: newApiKey },
+      data: { apiKey: encryptSecret(newApiKey, "apiKey") },
     });
   },
 
@@ -49,8 +50,8 @@ export const credentialStore = {
     await prisma.userConnection.update({
       where: { id: connectionId },
       data: {
-        oauthToken: credential.oauthToken ?? null,
-        oauthRefresh: credential.oauthRefresh ?? null,
+        oauthToken: credential.oauthToken ? encryptSecret(credential.oauthToken, "oauthToken") : null,
+        oauthRefresh: credential.oauthRefresh ? encryptSecret(credential.oauthRefresh, "oauthRefresh") : null,
         tokenExpiresAt: credential.tokenExpiresAt ?? null,
       },
     });

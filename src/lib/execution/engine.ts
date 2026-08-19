@@ -23,7 +23,7 @@ import { chat, streamChat, type LlmMessage, type LlmToolCall } from "@/lib/atlas
 import { LlmRequestError } from "@/lib/atlas/llm/errors";
 import { executeTool, getToolsForCapabilities, type ToolContext } from "@/lib/atlas/tools/registry";
 import { historyToLlmMessages } from "@/lib/atlas/conversation/history";
-import { buildSystemPrompt } from "@/lib/atlas/server/agent/prompts";
+import { buildSystemPrompt, resolveVoiceContextForUser } from "@/lib/atlas/server/agent/prompts";
 import {
   buildFollowUpMessages,
   looksLikeToolPayload,
@@ -104,26 +104,6 @@ function resolveConnectionRequestForDomain(domain: string): AtlasConnectionReque
       authMethod: "oauth",
       icon: "🚕",
       description: "Connect your Uber account to book rides directly.",
-    };
-  }
-  if (domain === "shopping") {
-    return {
-      integrationId: "amazon",
-      integrationName: "Amazon",
-      capability: "Shopping",
-      authMethod: "oauth",
-      icon: "📦",
-      description: "Connect your Amazon account for autonomous price comparison and 1-tap checkout.",
-    };
-  }
-  if (domain === "travel") {
-    return {
-      integrationId: "makemytrip",
-      integrationName: "MakeMyTrip",
-      capability: "Travel & Flights",
-      authMethod: "oauth",
-      icon: "✈️",
-      description: "Connect your travel account to search and prepare flight bookings.",
     };
   }
   return undefined;
@@ -237,6 +217,7 @@ async function liveGenerateReply(
   let systemPrompt = buildSystemPrompt(memoryRecall.lines, undefined, {
     flowGuide,
     memoryMode: memoryRecall.mode,
+    voiceContext: await resolveVoiceContextForUser(userId),
   });
   if (noProvider) {
     systemPrompt += `

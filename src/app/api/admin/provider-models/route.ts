@@ -16,6 +16,7 @@ const defaultBaseUrls: Record<string, string> = {
   nvidia: "https://integrate.api.nvidia.com/v1",
   google: "https://generativelanguage.googleapis.com/v1beta",
   anthropic: "https://api.anthropic.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
 };
 
 /**
@@ -51,6 +52,12 @@ const fallbackProviderModels: Record<string, string[]> = {
   nvidia: [
     "nvidia/llama-3.3-nemotron-super-49b-v1",
     "nvidia/llama-3.1-nemotron-nano-8b-v1",
+  ],
+  openrouter: [
+    "meta-llama/llama-3.3-70b-instruct",
+    "deepseek/deepseek-chat",
+    "google/gemini-2.5-pro",
+    "anthropic/claude-3.5-sonnet",
   ],
 };
 

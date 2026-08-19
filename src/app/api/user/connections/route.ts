@@ -29,6 +29,7 @@ export async function GET() {
       displayName: conn.displayName,
       status: conn.status,
       authMethod: integration?.authMethods.map((m) => m.kind).join(", ") ?? "unknown",
+      scopes: integration?.authMethods.flatMap((m) => m.scopes ?? []) ?? [],
       tokenExpiresAt: conn.tokenExpiresAt?.toISOString() ?? null,
       createdAt: conn.createdAt.toISOString(),
       updatedAt: conn.updatedAt.toISOString(),
@@ -43,6 +44,7 @@ export async function GET() {
       integrationName: i.name,
       capabilities: i.capabilities.map((c) => c.capabilityId),
       authMethod: i.authMethods.map((m) => m.kind).join(", "),
+      transport: i.transport,
     }));
 
   return NextResponse.json({ connections: result, available });

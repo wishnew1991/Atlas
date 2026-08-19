@@ -16,17 +16,25 @@ export function MobileOnly({ children }: { children: React.ReactNode }) {
     Boolean(pathname?.startsWith("/sign-in/")) ||
     pathname === "/sign-up" ||
     Boolean(pathname?.startsWith("/sign-up/"));
-  const [mode, setMode] = useState<"loading" | "mobile" | "desktop">(() =>
-    // Dev starts unlocked so laptop preview never flashes the loading gate.
-    process.env.NODE_ENV !== "production" ? "mobile" : "loading"
-  );
+  const [mode, setMode] = useState<"loading" | "mobile" | "desktop" | "local-frame">("loading");
 
   useEffect(() => {
     const evaluate = () => {
-      const isDev = process.env.NODE_ENV !== "production";
+      const host = typeof window !== "undefined" ? window.location.hostname : "";
+      // Localhost previews (dev, or a local production build) are shown in a
+      // centered mobile-width frame on desktop. Any deployed hostname falls
+      // through to the real gate.
+      const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
       const isTouch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
       const isNarrow = typeof window !== "undefined" && window.matchMedia("(max-width: 820px)").matches;
-      setMode(isDev || isTouch || isNarrow ? "mobile" : "desktop");
+
+      if (isTouch || isNarrow) {
+        setMode("mobile");
+      } else if (isLocal) {
+        setMode("local-frame");
+      } else {
+        setMode("desktop");
+      }
     };
 
     evaluate();
@@ -34,16 +42,27 @@ export function MobileOnly({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", evaluate);
   }, []);
 
+  const adminFrame = (
+    <div className="atlas-app-frame atlas-app-frame--admin">{children}</div>
+  );
+  const authFrame = (
+    <div className="atlas-app-frame atlas-app-frame--auth">{children}</div>
+  );
+  const consumerFrame = <div className="atlas-app-frame">{children}</div>;
+
+  const inner = isAdmin ? adminFrame : isAuth ? authFrame : consumerFrame;
+
+  // Admin and auth routes are always usable, but on localhost desktop we still
+  // render them inside the mobile preview frame.
   if (isAdmin || isAuth) {
-    return (
-      <div
-        className={
-          isAdmin ? "atlas-app-frame atlas-app-frame--admin" : "atlas-app-frame atlas-app-frame--auth"
-        }
-      >
-        {children}
-      </div>
-    );
+    if (mode === "local-frame") {
+      return (
+        <div className="atlas-local-preview">
+          <div className="atlas-local-mobile-frame">{inner}</div>
+        </div>
+      );
+    }
+    return inner;
   }
 
   if (mode === "loading") {
@@ -52,19 +71,35 @@ export function MobileOnly({ children }: { children: React.ReactNode }) {
 
   if (mode === "desktop") {
     return (
-      <div className="atlas-device-gate">
+      <div className="atlas-device-gate atlas-device-gate--landing">
         <div className="atlas-device-gate__icon">📱</div>
-        <h1>Atlas is mobile-only</h1>
-        <p>
-          Atlas is designed for your phone — it redirects you to apps like Google Pay and
-          PhonePe to complete payments, and shows your live order status in-app.
+        <h1>Atlas</h1>
+        <p className="atlas-device-gate__tagline">The assistant that already knows.</p>
+        <p className="atlas-device-gate__lede">
+          Atlas turns a message like &ldquo;order biryani&rdquo; or &ldquo;get me an Uber on Monday&rdquo; into a plan it prepares, shows you, gets your approval for, and then completes — across food, rides, shopping, and travel.
         </p>
-        <p className="atlas-device-gate__hint">
-          Please open this link on a mobile device to use Atlas.
-        </p>
+        <ul className="atlas-device-gate__features">
+          <li><strong>Execution-first:</strong> durable plans, step runners, post-approval resume — not a chat log with tools bolted on.</li>
+          <li><strong>Trust by design:</strong> explicit approvals, receipts, safety memory before any spend or booking.</li>
+          <li><strong>Human-like memory:</strong> confidence-weighted preferences; suggests only when asked; explores beyond historical favorites.</li>
+        </ul>
+        <div className="atlas-device-gate__cta">
+          <p>Atlas is designed for your phone — it redirects you to apps like Google Pay and PhonePe to complete payments, and shows your live order status in-app.</p>
+          <p className="atlas-device-gate__hint">
+            Open this link on a mobile device to try Atlas.
+          </p>
+        </div>
       </div>
     );
   }
 
-  return <div className="atlas-app-frame">{children}</div>;
+  if (mode === "local-frame") {
+    return (
+      <div className="atlas-local-preview">
+        <div className="atlas-local-mobile-frame">{inner}</div>
+      </div>
+    );
+  }
+
+  return inner;
 }

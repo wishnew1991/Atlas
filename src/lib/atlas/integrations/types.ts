@@ -10,9 +10,9 @@ import type { CanonicalCapability } from "@/lib/atlas/capabilities/types";
 
 // ── Transport ──
 
-export type TransportKind = "mcp" | "rest" | "sdk" | "graphql";
+export type TransportKind = "mcp" | "rest" | "sdk" | "graphql" | "browser";
 
-export const TRANSPORT_KINDS: TransportKind[] = ["mcp", "rest", "sdk", "graphql"];
+export const TRANSPORT_KINDS: TransportKind[] = ["mcp", "rest", "sdk", "graphql", "browser"];
 
 // ── Auth Methods ──
 
@@ -30,7 +30,8 @@ export interface AuthMethod {
 export interface IntegrationDefinition {
   id: string;                     // "swiggy", "zomato", "amazon"
   name: string;                   // "Swiggy", "Zomato", "Amazon"
-  transport: TransportKind;       // "mcp" | "rest" | "sdk" | "graphql"
+  transport: TransportKind;       // "mcp" | "rest" | "sdk" | "graphql" | "browser"
+  transportOrderJson?: string;    // optional transport fallback order from the DB row
   authMethods: AuthMethod[];
   icon?: string;
   description?: string;
