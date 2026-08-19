@@ -60,7 +60,7 @@ export async function POST(
 
   const requiresApiKey = integration.authMethods.some((m) => m.kind === "api_key");
   const supportsOAuth = integration.authMethods.some((m) => m.kind === "oauth2");
-  const isBrowser = integration.transport === "browser" || (integration.transportOrderJson || "").includes("browser");
+  const isBrowser = integration.transport === "browser";
 
   if (isBrowser) {
     const { gatewayCall } = await import("@/lib/atlas/gateway/gateway");

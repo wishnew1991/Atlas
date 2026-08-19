@@ -10,9 +10,9 @@ import type { CanonicalCapability } from "@/lib/atlas/capabilities/types";
 
 // ── Transport ──
 
-export type TransportKind = "mcp" | "rest" | "sdk" | "graphql";
+export type TransportKind = "mcp" | "rest" | "sdk" | "graphql" | "browser";
 
-export const TRANSPORT_KINDS: TransportKind[] = ["mcp", "rest", "sdk", "graphql"];
+export const TRANSPORT_KINDS: TransportKind[] = ["mcp", "rest", "sdk", "graphql", "browser"];
 
 // ── Auth Methods ──
 
